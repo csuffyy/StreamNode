@@ -1,9 +1,77 @@
-# StreamNode说明
+# StreamNode-GB28181(原StreamNode)说明
 ## 简介
 - 本项目是基于ZLMediaKit的流媒体控制管理接口平台，支持RTSP,GB28181的设备拉流与推流控制，GB28181部分支持PTZ控制。
 - 对ZLMediaKit的源码做了一些小的改造，用于将ZLMediaKit的http回调增加流媒体服务的唯一标识，以及对ffmpeg管理部分的一个小修改
+- <font color=#A52A2A size=12 >【特别说明1】</font>由于最近关注 StreamNode-GB28181（原StreamNode）的朋友越来越多，在这里统一做一下说明。当前StreamNode-GB28181只适配了Linux操作系统，在CentOS7,Ubuntu 20.x Desktop,嵌入式Rpibian buster (基于Debian的树莓派操作系统，StreamNode在树莓派4B上跑得非常好)上做过测试，可以正常运行；其他操作系统没有做过适配，可能无法正常使用，需要Windows部署的朋友可以自己动手改改代码，方便的话给我提个PR，我有空的时候也会把跨平台适配性加强一些。
+- <font color=#A52A2A size=12 >【特别说明2】</font>StreamNode-GB28181支持对ZLMediaKit流媒体服务的集群部署，组件[StreamMediaServerKeeper]与流媒体服务器[ZLMeidaKit]配对部署（必须在同一台服务器）；组件[StreamNodeWebApi]可以与[StreamMediaServerKeeper]不在同一台服务器，一个[StreamMediaServerKeeper]+[ZLMeidaKit]的组合是一个独立部分，通过内部的HttpWebApi接口实现流媒体与主控程序间的控制，[StreamNodeWebApi]负责GB28181的Sip信令控制，摄像头管理，录制计划管理，流媒体服务管理等功能，[StreamMediaServerKeeper]仅监控流媒体服务器[ZLMediaKit]的运行状态，提供对录制文件的裁剪与合并任务以及提供静态文件http服务功能。
 - 【新增】支持对公网动态ip的GB28181设备支持，通过数据库中的标记来确定是否校验设备IP地址，因此可以支持如4G国标协议执法记录仪接入
 - 【修复】Sip网关支持部署在内网，映射到公网IP的端口，即可提供服务,同时修复了推流设备在内网中GB28181协议注册时未正确获得真实设备IP的问题，表示可以正确识别与通讯内网的GB28181设备。
+## 采用StreamNode-GB28181接口管理平台实现的WEB管理平台展示（此平台不是StreamNode-GB28181的组件之一）
+- 视频广场
+![QQ20201116-150115@2x.png](https://i.loli.net/2020/11/16/dho7kcjfrwp6Vmq.png)
+- 录制计划
+![QQ20201116-150146@2x.png](https://i.loli.net/2020/11/16/5hjItzVg6oPFQdb.png)
+- 录制文件列表
+![QQ20201116-150157@2x.png](https://i.loli.net/2020/11/16/a3kwHGTOv89optU.png)
+- 录制文件回放
+![QQ20201116-150220@2x.png](https://i.loli.net/2020/11/16/yAg2dpLnsKoejqi.png)
+- 录制文件裁剪合并任务
+![QQ20201116-150334@2x.png](https://i.loli.net/2020/11/16/CSmtoqOZTzP9BAj.png)
+- RTSP兼容
+![QQ20201116-150511@2x.png](https://i.loli.net/2020/11/16/GPIwONuCHegi8xb.png)
+- GB28181兼容
+![QQ20201116-150530@2x.png](https://i.loli.net/2020/11/16/QRbZ69PnLi1TCyh.png)
+- 流媒体节点（ZLMediaKit+StreamNodeServiceKeeper）管理
+![QQ20201116-150453@2x.png](https://i.loli.net/2020/11/16/k9cDXlqBezt6PbZ.png)
+
+## 支持操作系统及要求
+- CentOS7.x  强烈推荐
+- Ubuntu
+- 需要Mysql5.7或Mariadb 10.3.x以上，（当然其他FreeSql库所支持的数据库也是支持的，比如Sqlite）
+# 运行
+## 环境
+- .net core 3.1
+- mysql 5.7以上或者其他freesql支持的数据库
+- ffmpeg 4.2.2以上
+- ffmpeg 需要放在StreamNodeWebApi和StreamMediaServerKeeper的部署目录中
+## 启动
+- mysql中创建一个名为“straemnode”的数据库，要和StreamNodeWebApi/system.conf中db行指定的一致，字符集请使用utf-8
+- StreamNodeWebApi 全局只启动一份
+- 部署目录中手工创建一个log文件夹
+~~~shell
+nohup dotnet StreamNodeWebApi.dll >/dev/null &
+~~~
+- StreamMediaServerKeeper 一个流媒体启动一份，可以与StreamNodeWebApi不在同一台服务器
+- 部署目录中手工创建一个log文件夹
+~~~shell
+nohup dotnet StreamMediaServerKeeper.dll >/dev/null &
+~~~
+# 调试
+## StreamNodeWebApi
+- http://ip:port(5800)/swagger/index.html
+## StreamMediaServerKeeper
+- http://ip:port(6880)/swagger/index.html
+## TODO List
+- 预计全面改用Log4net来记录日志，取消掉原来的Console.WriteLine等记录日志的手段(已完成)
+- 增加接口调用的鉴权机制(未开始)
+- 考虑SIP网关支持级联到上级平台(未开始)
+- 直播推流的完善支持(未开始)
+## 更新日志
+### 2020-10-12
+1. 更新读取ZLMediaKit配置文件时碰到以#开头的配置项时解析出错的情况，会先将此配置文件中所有以#开头的行改成以;开头，以确保以正确的ini标准的配置文件的注释。
+2. 调整配置文件位置，system.conf及logconfig.xml到项目的Config/下面。
+3. 跨平台方向上的测试与调优。
+### 2020-10-10
+1. 全面改用Log4Net来记录日志
+### 2020-10-09
+1. 【支持】StreamNode已经与最新版(2020-10-09)ZLMediaKit兼容，不再需要修改ZLMediaKit的源码了。
+### 2020-10-05    
+1. 【新增】sip网关收到gb28181设备的设备列表后，自动向Camera表插入这些设备列表作为可推流的设备后选 ，设置激活状态为非激活状态，此类设备需要通过接口进行激活。
+2. 【新增】增加/MediaServer/ActivateSipCamera接口，来完成对自动写入数据库的数据进行激活。
+3. 【修正】修正一个停止推流的bug。
+4. 【修正】修正一个可能存在的，针对于公网非固定ip的gb28181设备的通讯障碍问题（效果有待验证）。
+
+
 ## 接口功能
 ### DvrPlan 录制计划
 - /DvrPlan​/DeleteDvrPlanById          删除一个录制计划ById
@@ -43,6 +111,7 @@
 - /MediaServer​/RestartMediaServer          重启流媒体服务
 - /MediaServer​/StopMediaServer         关闭流媒体服务
 - /MediaServer​/StartMediaServer            启动流媒体服务
+- /MediaServer/ActivateSipCamera            对Sip网关自动写入的GB28181设备进行激活
 ### Sip网关相关
 - /SipGate​/ActiveDeviceCatalogQuery           获取Sip设备的目录列表
 - /SipGate​/GetAutoPushStreamState          获取Sip网关自动推流状态
@@ -59,12 +128,6 @@
 - 一些测试接口，可以无视
 ### WebHook
 - 用于ZLMediaKit回调的一些接口，可以无视
-
-## TODO List
-- 预计全面改用Log4net来记录日志，取消掉原来的Console.WriteLine等记录日志的手段(未开始)
-- 增加接口调用的鉴权机制(未开始)
-- 考虑SIP网关支持级联到上级平台(未开始)
-- 直播推流的完善支持(未开始)
 
 ## 结构介绍
 - ![StreamNode结构.jpg](https://i.loli.net/2020/09/29/xwkeW8agYspHKUt.jpg)
@@ -93,17 +156,20 @@
 - GB28181请求推流：当此注册摄像头注册信息中的拉流方式为GB28181时，StreamNodeWebApi,将向ZLMediaKit申请rtp动态端口（TCP，UDP全开），端口申请成功获取到实际端口号后，StreamNodeApi根据摄像头注册信息组织实时流请求的Sip报文，并在此时确定流的ssrc值，将生成的Sip请求实时流报文通过Sip通讯通渞发送给摄像头，摄像头收到请求后根据Sip报文内容向ZLMediakit流媒体服务器的Sip报文指定端口以指定ssrc值推送rtp流，ZLMediaKit收到rtp流后对期进行解码，生产Onpublish事件并告知SteramNodeWebApi的Webhook接口，StreamNodeWebApi实现后续的相关处理
 - 摄像头的推拉流工作受控与StreamNodeWebApi的摄像头注册信息中的LiveEnable字段，可以通过改变此字段的值（true,false）来实现摄像头音视频流的开关
 
-## StreamNode录制计划
+## StreamNode-GB28181录制计划
 - 可对每个注册摄像头进行录制计划的控制，以控制某时某刻音视频文件录制的启停
 - 系统当前仅支持mp4文件的录制
 - StreamNodeWebApi，以星期为单位控制每个星期n的00:00:01到23:59:59的录制与不录制控制（可以出现多个星期n的数据，表示每天启用与停用录制可以多段，我记得我好像是这么实现的）
 - 如果某个摄像头启用了录制功能，却没有指定星期n的录制计划要求，系统默认其为全天录制
-## StreamNode对音视频文件的裁剪与合并操作
+## StreamNode-GB28181对音视频文件的裁剪与合并操作
 - 有时需要提取某个摄像头在某个时间范围的视频，可以通过StreamNodeWebApi的相关接口进行获取
 - 此操作是一个耗时操作，因此采用异步回调的方式来获取任务结果，调用方需提供一个WebApi接口来接受任务结果
 - 可能因为某些原因造成回调时调用方的WebApi不可用，导致任务结果未收到的情况，系统提供任务状态查询接口供调用方查询，此接口同样适用于任务进度的追踪（StreamMediaServerKeeper被重启后所有之前的任务结果会被清空，因为StreamMediaServerKeeper没有数据库持久保存这些数据）
 
-## 修改ZLMediaKit的部分代码（ZLMediaKit作者将在近期将以下修改代码直接合并到自己的主分支上，后续将不需要再修改ZLmediaKit的代码了）
+<details>
+  <summary>老版本ZLMediaKit的代码修改请看这里</summary>
+
+## 修改ZLMediaKit的部分代码（ZLMediaKit官方已经在2020-10-09日合并了我的pr,使用2020-10-09以后ZLMeidakit代码生成的可的行文件就不需要再做以下代码修改了）
 - /src/Common/config.cpp
 ~~~c++
 namespace mediakit {
@@ -463,6 +529,8 @@ string Recorder::getRecordPath(Recorder::type type, const string &vhost, const s
 }
 ~~~
 
+</details>
+
 # 组成部分
 ## StreamNodeWebApi
 - 全局的流媒体管理API服务，包含了所有流媒体功能的控制，如摄像头注册，录制计划，rtp推流,ptz控制等。
@@ -517,48 +585,72 @@ string Recorder::getRecordPath(Recorder::type type, const string &vhost, const s
 
 
 
-## StreamNodeWebApi/system.conf
+## StreamNodeWebApi/Config/system.conf
 - StreamNodeWebApi的配置文件,参数名与参数值以::分开，每行以;结束
 - 数据库方面采用CodeFirst 模式，在数据库中建立一个名为streamnode的库，数据表会自动创建
 ~~~
-httpport::5800;   //webapi的端口
-password::password123!@#; //暂时无用
-allowkey::0D906284-6801-4B84-AEC9-DCE07FAE81DA	*	192.168.2.*	; //鉴权，暂时无用
-db::Data Source=192.168.2.35;Port=3306;User ID=root;Password=password; Initial Catalog=streamnode;Charset=utf8; SslMode=none;Min pool size=1;//数据库连接串
-dbtype::mysql;//数据库类型
-ffmpegpath::./ffmpeg;//ffmpeg可执行文件的位置
+#webapi的端口
+httpport::5800;
+#暂时无用
+password::password123!@#;
+#鉴权，暂时无用
+allowkey::0D906284-6801-4B84-AEC9-DCE07FAE81DA	*	192.168.2.*	; 
+#数据库连接串
+db::Data Source=192.168.2.35;Port=3306;User ID=root;Password=password; Initial Catalog=streamnode;Charset=utf8; SslMode=none;Min pool size=1;
+#数据库类型
+dbtype::mysql;
+#ffmpeg可执行文件的位置
+ffmpegpath::./ffmpeg;
 ~~~
 
-## StreamMediaServerKeeper/Config.conf 
+## StreamMediaServerKeeper/Config/config.conf 
 - StreamMediaServerKeeper的配置文件
 ~~~
-MediaServerBinPath::/root/MediaService/MediaServer;//ZLMediaKit流媒体服务器可执行文件路径
-StreamNodeServerUrl::http://192.168.2.43:5800/WebHook/MediaServerRegister; //向哪个StreamNodeWebApi注册自己的服务
-HttpPort::6880;//服务的WebApi端口
-IpAddress::192.168.2.43;//本机ip地址
-CustomizedRecordFilePath::/home/cdtnb; //自定义存储视频的位置 
+#ZLMediaKit流媒体服务器可执行文件路径
+MediaServerBinPath::/root/MediaService/MediaServer;
+#向哪个StreamNodeWebApi注册自己的服务
+StreamNodeServerUrl::http://192.168.2.43:5800/WebHook/MediaServerRegister;
+#服务的WebApi端口
+HttpPort::6880;
+#本机ip地址
+IpAddress::192.168.2.43;
+#自定义存储视频的位置 
+CustomizedRecordFilePath::/home/cdtnb;
+~~~
+
+## StreamNodeWebApi/Config/logconfig.xml & StreamMediaServerKeeper/Config/logconfig.xml
+- 日志配置文件
+~~~xml
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+    <!-- This section contains the log4net configuration settings -->
+    <log4net>
+        <appender name="ConsoleAppender" type="log4net.Appender.ConsoleAppender">
+            <layout type="log4net.Layout.PatternLayout" value="%date [%thread] %-5level %logger - %message%newline" />
+        </appender>
+        
+
+        <appender name="RollingLogFileAppender" type="log4net.Appender.RollingFileAppender">
+            <file value="log/" />
+            <appendToFile value="true" />
+            <rollingStyle value="Composite" />
+            <staticLogFileName value="false" />
+            <datePattern value="yyyyMMdd'.log'" />
+            <maxSizeRollBackups value="10" />
+            <maximumFileSize value="10MB" />
+            <layout type="log4net.Layout.PatternLayout" value="%date [%thread] %-5level %logger - %message%newline" />
+        </appender>
+
+        <!-- Setup the root category, add the appenders and set the default level -->
+        <root>
+            <level value="ALL" />
+            <appender-ref ref="ConsoleAppender" />
+            <appender-ref ref="RollingLogFileAppender" />
+        </root>
+
+    </log4net>
+</configuration>
 ~~~
 
 
-# 运行
-## 环境
-- .net core 3.1
-- mysql 5.5以上或者其他freesql支持的数据库
-- ffmpeg 4.2.2以上
-- ffmpeg 需要放在StreamNodeWebApi和StreamMediaServerKeeper的部署目录中
-## 启动
-- StreamNodeWebApi 全局只启动一份
-- 部署目录中手工创建一个log文件夹
-~~~shell
-nohup dotnet StreamNodeWebApi.dll >./log/run.log &
-~~~
-- StreamMediaServerKeeper 一个流媒体启动一份，可以与StreamNodeWebApi不在同一台服务器
-- 部署目录中手工创建一个log文件夹
-~~~shell
-nohup dotnet StreamMediaServerKeeper.dll >./log/run.log &
-~~~
-# 调试
-## StreamNodeWebApi
-- http://ip:port(5800)/swagger/index.html
-## StreamMediaServerKeeper
-- http://ip:port(6880)/swagger/index.html
+

@@ -21,7 +21,7 @@ namespace StreamNodeCtrlApis.WebHookApis
         /// </summary>
         /// <param name="session"></param>
         /// <returns></returns>
-        private static CameraInstance getCameraFromCameraInstance(CameraSession session)
+        private static CameraInstance GetCameraFromCameraInstance(CameraSession session)
         {
             lock (Common.CameraInstanceListLock)
             {
@@ -29,10 +29,9 @@ namespace StreamNodeCtrlApis.WebHookApis
                 {
                     foreach (var camera in Common.CameraInstanceList)
                     {
-                        if (camera != null && camera.CameraChannelLable.Equals(session.CameraEx.Camera.DeviceID)
-                                           && camera.CameraDeviceLable.Equals(session.CameraEx.Camera.ParentID))
+                        if (camera != null && camera.CameraChannelLable!.Equals(session.CameraEx!.Camera.DeviceID)
+                                           && camera.CameraDeviceLable!.Equals(session.CameraEx!.Camera.ParentID))
                         {
-                            CameraInstance tmp = null;
                             return JsonHelper.FromJson<CameraInstance>(JsonHelper.ToJson(camera));
                         }
                     }
@@ -85,7 +84,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                 session.CameraType = CameraType.GB28181;
                 session.CameraEx = cameraEx;
                 //获取cameraId
-                var cameraInstance = getCameraFromCameraInstance(session);
+                var cameraInstance = GetCameraFromCameraInstance(session);
                 if (cameraInstance != null)
                 {
                     session.CameraId = cameraInstance.CameraId;
@@ -128,7 +127,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                 Code = ErrorNumber.None,
                 Message = ErrorMessage.ErrorDic![ErrorNumber.None],
             };
-            var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(req.Mediaserverid));
+            var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(req.MediaServerId));
             if (mediaServer == null)
             {
                 return new ResToWebHookOnPublish()
@@ -144,7 +143,7 @@ namespace StreamNodeCtrlApis.WebHookApis
             CameraSession session = null;
             lock (Common.CameraSessionLock)
             {
-                session = Common.CameraSessions.FindLast(x => x.MediaServerId.Equals(req.Mediaserverid)
+                session = Common.CameraSessions.FindLast(x => x.MediaServerId.Equals(req.MediaServerId)
                                                               && x.Vhost.Equals(req.Vhost) &&
                                                               x.App.Equals(req.App) &&
                                                               x.StreamId.Equals(req.Stream) &&
@@ -164,12 +163,13 @@ namespace StreamNodeCtrlApis.WebHookApis
                     CameraIpAddress = req.Ip,
                     UpTime = 0f,
                     OnlineTime = DateTime.Now,
-                    MediaServerId = req.Mediaserverid,
+                    MediaServerId = req.MediaServerId,
                     IsRecord = false,
                     PlayUrl = "http://" + mediaServer.Ipaddress + ":" + mediaServer.MediaServerHttpPort +
                               "/" + req.App + "/" + req.Stream + ".flv",
                     IsOnline = true,
                     ForceOffline = false,
+                    MediaServerIp = mediaServer.Ipaddress,
                 };
                 if (getCameraSessionInfoEx(ref session))
                 {
@@ -233,6 +233,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                 OrmService.Db.Insert<ClientOnOffLog>(tmpClientLog).ExecuteAffrows();
             }
 
+            Logger.Logger.Info("流发布成功->"+mediaServer.MediaServerId+"->"+session.CameraId+"->"+session.CameraType+"->"+session.Vhost+"->"+session.App+"->"+session.StreamId+"->"+session.PlayUrl);
             return new ResToWebHookOnPublish() //返回zlmediakit成功
             {
                 Code = 0,
@@ -251,7 +252,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                 Code = ErrorNumber.None,
                 Message = ErrorMessage.ErrorDic![ErrorNumber.None],
             };
-            var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(req.Mediaserverid));
+            var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(req.MediaServerId));
             if (mediaServer == null)
             {
                 return new ResToWebHookOnStreamChange()
@@ -307,6 +308,8 @@ namespace StreamNodeCtrlApis.WebHookApis
                         OrmService.Db.Insert<ClientOnOffLog>(tmpClientLog).ExecuteAffrows();
                         lock (Common.PlayerSessionListLock)
                         {
+                            Logger.Logger.Info("停止播放->"+mediaServer.MediaServerId+"->"+tmpClientLog.CameraId+"->"+tmpClientLog.Vhost+"->"+tmpClientLog.App+"->"+tmpClientLog.StreamId+"->"+req.Ip+"->"+req.Id+"->"+req.Duration+"->"+req.TotalBytes);
+
                             Common.PlayerSessions.Remove(player);
                         }
                     }
@@ -330,11 +333,13 @@ namespace StreamNodeCtrlApis.WebHookApis
                         lock (Common.CameraSessionLock)
                         {
                             camera.IsOnline = false;
+                            Logger.Logger.Info("流停止发布->"+mediaServer.MediaServerId+"->"+tmpClientLog.CameraId+"->"+camera.ClientType+"->"+tmpClientLog.Vhost+"->"+tmpClientLog.App+"->"+tmpClientLog.StreamId);
+
                         }
                     }
                 }
             }
-
+            
             return new ResToWebHookOnStreamChange()
             {
                 Code = 0,
@@ -413,7 +418,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                 StreamId = player.StreamId,
             };
             OrmService.Db.Insert<ClientOnOffLog>(tmpClientLog).ExecuteAffrows();
-
+            Logger.Logger.Info("开始播放->"+mediaServer.MediaServerId+"->"+player.CameraId+"->"+player.Vhost+"->"+player.App+"->"+player.StreamId+"->"+req.Ip+"->"+req.Id+"->"+player.PlayUrl);
             return new ResToWebHookOnStreamChange()
             {
                 Code = 0,
@@ -436,7 +441,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                 Code = ErrorNumber.None,
                 Message = ErrorMessage.ErrorDic![ErrorNumber.None],
             };
-            var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(req.Mediaserverid));
+            var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(req.MediaServerId));
             if (mediaServer == null)
             {
                 return new ResToWebHookOnStreamChange()
@@ -454,7 +459,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                     Duration = null,
                     Id = null,
                     Ip = null,
-                    Mediaserverid = req.Mediaserverid,
+                    MediaServerId = req.MediaServerId,
                     Params = null,
                     Player = false,
                     Port = null,
@@ -472,7 +477,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                     checksession = Common.CameraSessions.FindLast(x => x.App.Equals(req.App)
                                                                        && x.Vhost.Equals(req.Vhost) &&
                                                                        x.StreamId.Equals(req.Stream) &&
-                                                                       x.MediaServerId.Equals(req.Mediaserverid));
+                                                                       x.MediaServerId.Equals(req.MediaServerId));
                 }
 
                 if (checksession == null)
@@ -488,7 +493,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                         lock (Common.CameraInstanceListLock)
                         {
                             camera = Common.CameraInstanceList.FindLast(x =>
-                                x.IfRtspUrl.Equals(ffmpegObj.Src_Url) && x.PushMediaServerId.Equals(req.Mediaserverid));
+                                x.IfRtspUrl.Equals(ffmpegObj.Src_Url) && x.PushMediaServerId.Equals(req.MediaServerId));
                         }
 
 
@@ -550,6 +555,8 @@ namespace StreamNodeCtrlApis.WebHookApis
                                 StreamId = session.StreamId,
                                 Schema = "rtsp",
                             };
+                            Logger.Logger.Info("RTSP流发布->"+mediaServer.MediaServerId+"->"+tmpClientLog.CameraId+"->"+session.ClientType+"->"+tmpClientLog.Vhost+"->"+tmpClientLog.App+"->"+tmpClientLog.StreamId);
+
                             OrmService.Db.Insert<ClientOnOffLog>(tmpClientLog).ExecuteAffrows();
                         }
                         else
@@ -585,6 +592,8 @@ namespace StreamNodeCtrlApis.WebHookApis
                         StreamId = checksession.StreamId,
                         Schema = "rtsp",
                     };
+                    Logger.Logger.Info("RTSP流发布->"+mediaServer.MediaServerId+"->"+tmpClientLog.CameraId+"->"+checksession.ClientType+"->"+tmpClientLog.Vhost+"->"+tmpClientLog.App+"->"+tmpClientLog.StreamId);
+
                     OrmService.Db.Insert<ClientOnOffLog>(tmpClientLog).ExecuteAffrows();
                 }
             }
@@ -604,7 +613,7 @@ namespace StreamNodeCtrlApis.WebHookApis
                 Code = ErrorNumber.None,
                 Message = ErrorMessage.ErrorDic![ErrorNumber.None],
             };
-            var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(record.Mediaserverid));
+            var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(record.MediaServerId));
             if (mediaServer == null)
             {
                 return new ResToWebHookOnStreamChange()
@@ -628,12 +637,39 @@ namespace StreamNodeCtrlApis.WebHookApis
             tmpDvrVideo.Duration = record.Time_Len;
             tmpDvrVideo.Undo = false;
             tmpDvrVideo.Deleted = false;
-            tmpDvrVideo.PushMediaServerId = record.Mediaserverid;
+            tmpDvrVideo.PushMediaServerId = record.MediaServerId;
             tmpDvrVideo.UpdateTime = currentTime;
             tmpDvrVideo.RecordDate = st.ToString("yyyy-MM-dd");
-            tmpDvrVideo.DownloadUrl = "http://" + mediaServer.Ipaddress + ":" + mediaServer.WebApiPort +
-                                      "/CustomizedRecord/" +
-                                      tmpDvrVideo.DownloadUrl;
+            string tmp = tmpDvrVideo.DownloadUrl;
+            tmp = tmp.Replace("\\", "/", StringComparison.Ordinal); //跨平台兼容
+            if (tmp.Contains(":"))
+            {
+                tmp = tmp.Substring(tmp.IndexOf(':') + 1); //清除掉类似  c: 这样的字符，跨平台兼容
+            }
+
+            if (!string.IsNullOrEmpty(mediaServer.RecordFilePath) &&
+                record.File_Path.Contains(mediaServer.RecordFilePath))
+            {
+                tmp = tmp.Replace(mediaServer.RecordFilePath, "", StringComparison.Ordinal);
+                if (tmp.StartsWith("/"))
+                {
+                    tmp = tmp.TrimStart('/');
+                }
+
+                tmpDvrVideo.DownloadUrl = "http://" + mediaServer.Ipaddress + ":" + mediaServer.WebApiPort +
+                                          "/CustomizedRecord/" + tmp;
+            }
+            else
+            {
+                //如果不包含自定义视频存储目录地址，就认为是默认地址
+                if (!string.IsNullOrEmpty(tmp) && tmp.Contains("/record/"))
+                {
+                    tmp = tmp.Replace("/record/", "", StringComparison.Ordinal);
+                }
+
+                tmpDvrVideo.DownloadUrl = "http://" + mediaServer.Ipaddress + ":" + mediaServer.WebApiPort +
+                                          "/CustomizedRecord/" + tmp;
+            }
 
             CameraSession session = null;
             lock (Common.CameraSessionLock)
@@ -654,6 +690,8 @@ namespace StreamNodeCtrlApis.WebHookApis
             }
 
             OrmService.Db.Insert(tmpDvrVideo).ExecuteAffrows();
+            Logger.Logger.Info("文件录制成功->"+mediaServer.MediaServerId+"->"+tmpDvrVideo.CameraId+"->"+session.ClientType+"->"+tmpDvrVideo.Vhost+"->"+tmpDvrVideo.App+"->"+tmpDvrVideo.Streamid+"->"+tmpDvrVideo.FileSize +"->"+tmpDvrVideo.VideoPath);
+
             return new ResToWebHookOnStreamChange()
             {
                 Code = 0,

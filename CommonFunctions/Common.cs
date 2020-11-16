@@ -16,7 +16,7 @@ namespace CommonFunctions
     {
         public static bool IsDebug = true;
         public static string WorkPath = Environment.CurrentDirectory + "/";
-        public static string SystemConfigPath = WorkPath + "system.conf";
+        public static string SystemConfigPath = WorkPath + "/Config/system.conf";
         public static string SystemLogPath = WorkPath + "log/";
         public static int FFmpegThreadCount = 2;
         public static string FFmpegBinPath = "./ffmpeg";
@@ -26,7 +26,6 @@ namespace CommonFunctions
         public static List<MediaServerInstance> MediaServerList = new List<MediaServerInstance>();
         public static List<CameraInstance> CameraInstanceList = new List<CameraInstance>();
 
-        public static LogMonitor LogMonitor = new LogMonitor();
 
         //在线的摄像头列表
         public static List<CameraSession> CameraSessions = new List<CameraSession>();
@@ -241,7 +240,7 @@ namespace CommonFunctions
                 ffpath = "ffmpeg";
             }
 
-            LinuxShell.Run(ffpath, 1000, out string std, out string err);
+            ProcessShell.Run(ffpath, 1000, out string std, out string err);
             if (!string.IsNullOrEmpty(std))
             {
                 if (std.ToLower().Contains("ffmpeg version"))
@@ -432,7 +431,8 @@ namespace CommonFunctions
         /// </summary>
         public static void KillSelf()
         {
-            LogWriter.WriteLog("因异常结束进程...");
+            //  LogWriter.WriteLog("因异常结束进程...");
+            Logger.Logger.Fatal("因异常结束进程...");
             string fileName = Path.GetFileName(Environment.GetCommandLineArgs()[0]);
             var ret = GetProcessPid(fileName);
             if (ret > 0)
@@ -444,7 +444,7 @@ namespace CommonFunctions
         public static void KillProcess(int pid)
         {
             string cmd = "kill -9 " + pid.ToString();
-            LinuxShell.Run(cmd, 1000);
+            ProcessShell.Run(cmd, 1000);
         }
 
         /// <summary>
@@ -464,7 +464,7 @@ namespace CommonFunctions
                 cmd = "ps -A |grep " + processName + "|grep -v grep|awk \'{print $1}\'";
             }
 
-            LinuxShell.Run(cmd, 1000, out string std, out string err);
+            ProcessShell.Run(cmd, 1000, out string std, out string err);
             if (string.IsNullOrEmpty(std) && string.IsNullOrEmpty(err))
             {
                 return -1;

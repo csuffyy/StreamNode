@@ -10,6 +10,9 @@ using StreamNodeCtrlApis.SystemApis;
 
 namespace StreamNodeWebApi.AutoTasker
 {
+    /// <summary>
+    /// 录制计划控制
+    /// </summary>
     public class RecordAutoKeeper
     {
         /// <summary>
@@ -53,7 +56,7 @@ namespace StreamNodeWebApi.AutoTasker
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                Logger.Logger.Error(ex.Message + "->" + ex.StackTrace);
             }
         }
 
@@ -103,7 +106,7 @@ namespace StreamNodeWebApi.AutoTasker
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                Logger.Logger.Error(ex.Message + "->" + ex.StackTrace);
                 return -1;
             }
         }
@@ -112,6 +115,7 @@ namespace StreamNodeWebApi.AutoTasker
         /// 一天一天删除文件
         /// </summary>
         /// <param name="days"></param>
+        /// <param name="sdp"></param>
         private void DeleteFileByDay(List<string> days, StreamDvrPlan sdp)
         {
             var mediaServer =
@@ -132,7 +136,8 @@ namespace StreamNodeWebApi.AutoTasker
                         .Set(x => x.Deleted, true)
                         .Where(x => x.RecordDate == day).ExecuteAffrows();
                     mediaServer.DeleteFileList(deleteFileList, out _);
-                    LogWriter.WriteLog("要删除除一天的文件，数据库标记为删除", day!);
+                    Logger.Logger.Info(sdp.MediaServerId+"->"+sdp.CameraId+"->"+"要删除除一天的文件，数据库标记为删除 -> " + day!);
+                    // LogWriter.WriteLog("要删除除一天的文件，数据库标记为删除", day!);
                 }
 
                 Thread.Sleep(100);
@@ -188,7 +193,7 @@ namespace StreamNodeWebApi.AutoTasker
                                     OrmService.Db.Update<RecordFile>().Set(x => x.UpdateTime, DateTime.Now)
                                         .Set(x => x.Deleted, true)
                                         .Where(x => x.Id == ret!.Id).ExecuteAffrows();
-                                    LogWriter.WriteLog("删除录制文件", ret.VideoPath!);
+                                    Logger.Logger.Info(sdp.MediaServerId+"->"+sdp.CameraId+"->"+"删除录制文件 -> " + ret.VideoPath!);
                                     Thread.Sleep(20);
                                 }
                             }
@@ -263,6 +268,7 @@ namespace StreamNodeWebApi.AutoTasker
             string end = d.EndTime.ToString("HH:mm:ss");
             TimeSpan workStartDt = DateTime.Parse(start).TimeOfDay;
             TimeSpan workEndDt = DateTime.Parse(end).TimeOfDay;
+          
             if (nowDt > workStartDt && nowDt < workEndDt)
             {
                 return true;
@@ -281,7 +287,28 @@ namespace StreamNodeWebApi.AutoTasker
         {
             if (sdp.TimeRangeList != null && sdp.TimeRangeList.Count > 0)
             {
-                var t = sdp.TimeRangeList.FindLast(x => x.WeekDay == DateTime.Now.DayOfWeek);
+                bool haveFalse = false;
+                foreach (var sdpTimeRange in sdp.TimeRangeList)
+                {
+                    
+                    if ( sdpTimeRange!=null && sdpTimeRange.WeekDay == DateTime.Now.DayOfWeek && isTimeRange(sdpTimeRange))
+                    {
+                        return true;//有当天计划并在时间反问内返回true
+                    }
+
+                    if (sdpTimeRange != null && sdpTimeRange.WeekDay == DateTime.Now.DayOfWeek &&
+                        !isTimeRange(sdpTimeRange))
+                    {
+                        haveFalse = true;//当天计划存在，但不在范围，先做个标记，因为也许会有多个星期n的情况
+                    }
+                   
+                }
+                if (haveFalse) 
+                {
+                    return false;//如果循环以外，haveFalse为true,说明真的不在范围内
+                }
+              
+                /*var t = sdp.TimeRangeList.FindLast(x => x.WeekDay == DateTime.Now.DayOfWeek);
                 if (t != null && isTimeRange(t)) //有当天计划并在时间反问内返回true
                 {
                     return true;
@@ -292,7 +319,7 @@ namespace StreamNodeWebApi.AutoTasker
                     return false;
                 }
 
-                return true; //如果没有设置当天计划也返回true
+                return true; //如果没有设置当天计划也返回true*/
             }
 
             return true; //如果是空的，就直接返回可运行
@@ -311,7 +338,7 @@ namespace StreamNodeWebApi.AutoTasker
                 var sessionList = MediaServerApis.GetCameraSessionList(mediaServer.MediaServerId, out _);
                 if (sessionList != null)
                 {
-                    var obj = sessionList.FindLast(x => x.CameraId.Equals(sdp.CameraId));
+                    var obj = sessionList.FindLast(x => x.CameraId!.Equals(sdp.CameraId));
                     if (obj != null)
                     {
                         var ret = mediaServer.WebApi.GetRecordStatus(new ReqZLMediaKitStopRecord()
@@ -327,8 +354,8 @@ namespace StreamNodeWebApi.AutoTasker
                             {
                                 lock (Common.CameraSessionLock)
                                 {
-                                    Common.CameraSessions.FindLast(x => x.CameraId.Equals(obj.CameraId)
-                                                                        && x.MediaServerId.Equals(obj.MediaServerId))
+                                    Common.CameraSessions.FindLast(x => x.CameraId!.Equals(obj.CameraId)
+                                                                        && x.MediaServerId!.Equals(obj.MediaServerId))!
                                         .IsRecord = ret.Status;
                                 }
                             }
@@ -352,7 +379,7 @@ namespace StreamNodeWebApi.AutoTasker
         /// </summary>
         /// <param name="sdp"></param>
         /// <param name="enable"></param>
-        private void setDvrOnorOff(StreamDvrPlan sdp, bool enable)
+        private void setDvrOnorOff(StreamDvrPlan? sdp, bool enable)
         {
             var mediaServer = Common.MediaServerList.FindLast(x => x.MediaServerId.Equals(sdp.MediaServerId));
             if (mediaServer != null && mediaServer.IsRunning)
@@ -360,7 +387,7 @@ namespace StreamNodeWebApi.AutoTasker
                 var sessionList = MediaServerApis.GetCameraSessionList(mediaServer.MediaServerId, out _);
                 if (sessionList != null)
                 {
-                    var obj = sessionList.FindLast(x => x.CameraId.Equals(sdp.CameraId));
+                    var obj = sessionList.FindLast(x => x.CameraId!.Equals(sdp!.CameraId));
                     if (obj != null)
                     {
                         if (enable)
@@ -393,7 +420,7 @@ namespace StreamNodeWebApi.AutoTasker
         /// <summary>
         /// 执行启动和关闭指令
         /// </summary>
-        /// <param name="dvrPlan"></param>
+        /// <param name="sdp">参数</param>
         private void execOnOrOff(StreamDvrPlan sdp)
         {
             bool isEnable = true;
@@ -441,7 +468,21 @@ namespace StreamNodeWebApi.AutoTasker
             {
                 if (!getDvrOnorOff(sdp))
                 {
-                    LogWriter.WriteLog("录制计划即将启动录制,因为视频流没有达到受限条件，已经进入计划规定时间内并且录制程序处于关闭状态",
+                    Logger.Logger.Info("录制计划即将启动录制,因为视频流没有达到受限条件，已经进入计划规定时间内并且录制程序处于关闭状态 -> " +
+                                       sdp.MediaServerId + "->" +
+                                       sdp.CameraId + "->" +
+                                       sdp.CameraId +
+                                       "\t" + "空间限制：" +
+                                       sdp.LimitSpace.ToString() +
+                                       "字节::实际空间占用：" +
+                                       videoSize.ToString() +
+                                       "字节 \t时间限制：" +
+                                       sdp.LimitDays.ToString() +
+                                       "天::实际录制天数：" +
+                                       dateCount.ToString() +
+                                       "\t录制计划启用状态:" +
+                                       sdp.Enable.ToString());
+                    /*LogWriter.WriteLog("录制计划即将启动录制,因为视频流没有达到受限条件，已经进入计划规定时间内并且录制程序处于关闭状态",
                         sdp.MediaServerId + "->" +
                         sdp.CameraId + "->" +
                         sdp.CameraId +
@@ -454,7 +495,7 @@ namespace StreamNodeWebApi.AutoTasker
                         "天::实际录制天数：" +
                         dateCount.ToString() +
                         "\t录制计划启用状态:" +
-                        sdp.Enable.ToString());
+                        sdp.Enable.ToString());*/
                     setDvrOnorOff(sdp, true);
                 }
             }
@@ -462,7 +503,20 @@ namespace StreamNodeWebApi.AutoTasker
             {
                 if (getDvrOnorOff(sdp))
                 {
-                    LogWriter.WriteLog("录制计划即将关闭录制,因为视频流可能达到受限条件或者已经离开计划规定时间内并且录制程序处于启动状态",
+                    Logger.Logger.Info("录制计划即将关闭录制,因为视频流可能达到受限条件或者已经离开计划规定时间内并且录制程序处于启动状态 -> " +
+                                       sdp.MediaServerId + "->" +
+                                       sdp.CameraId + "->" +
+                                       "\t" + "空间限制：" +
+                                       sdp.LimitSpace.ToString() +
+                                       "字节::实际空间占用：" +
+                                       videoSize.ToString() +
+                                       "字节 \t时间限制：" +
+                                       sdp.LimitDays.ToString() +
+                                       "天::实际录制天数：" +
+                                       dateCount.ToString() +
+                                       "\t录制计划启用状态:" +
+                                       sdp.Enable.ToString());
+                    /*LogWriter.WriteLog("录制计划即将关闭录制,因为视频流可能达到受限条件或者已经离开计划规定时间内并且录制程序处于启动状态",
                         sdp.MediaServerId + "->" +
                         sdp.CameraId + "->" +
                         "\t" + "空间限制：" +
@@ -474,7 +528,7 @@ namespace StreamNodeWebApi.AutoTasker
                         "天::实际录制天数：" +
                         dateCount.ToString() +
                         "\t录制计划启用状态:" +
-                        sdp.Enable.ToString());
+                        sdp.Enable.ToString());*/
                     setDvrOnorOff(sdp, false);
                 }
             }
@@ -484,11 +538,18 @@ namespace StreamNodeWebApi.AutoTasker
         {
             lock (Common.CameraSessionLock)
             {
-                var session = Common.CameraSessions.FindLast(x => x.MediaServerId.Equals(mediaServerId)
-                                                                  && x.CameraId.Equals(cameraId));
+                var session = Common.CameraSessions.FindLast(x => x.MediaServerId!.Equals(mediaServerId)
+                                                                  && x.CameraId!.Equals(cameraId));
                 if (session != null)
                 {
-                    return (bool) session.IsOnline;
+                    if (session.IsOnline != null)
+                    {
+                        return (bool) session.IsOnline;
+                    }
+                    else
+                    {
+                        return false;
+                    }
                 }
 
                 return false;
@@ -508,66 +569,72 @@ namespace StreamNodeWebApi.AutoTasker
                         Thread.Sleep(5000);
                         continue;
                     }
-                        foreach (var mediaServer in Common.MediaServerList)
+
+                    foreach (var mediaServer in Common.MediaServerList)
+                    {
+                        if (mediaServer != null && mediaServer.IsRunning)
                         {
-                            if (mediaServer != null && mediaServer.IsRunning)
+                            if (i % 50 == 0)
                             {
-                                if (i % 50 == 0)
+                                mediaServer.ClearNoFileDir(out _); //清除空目录
+                            }
+
+                            ReqGetDvrPlan rgdp = new ReqGetDvrPlan();
+                            rgdp.MediaServerId = mediaServer.MediaServerId;
+                            var dvrPlanList = DvrPlanApis.GetDvrPlanList(rgdp, out ResponseStruct rs);
+                            if (dvrPlanList == null || dvrPlanList.Count == 0) continue;
+                            foreach (var dvrPlan in dvrPlanList)
+                            {
+                                if (dvrPlan.Enable == false)
                                 {
-                                    mediaServer.ClearNoFileDir(out _); //清除空目录
+                                    bool ret = true;
+                                    ret = getDvrOnorOff(
+                                        dvrPlan!); //如果录制计划为停止状态，在处理下一个计划任务前要查看该录制计划是否正在执行，正在扫行的话，要停掉它
+
+                                    if (ret)
+                                    {
+                                        setDvrOnorOff(dvrPlan, false);
+                                    }
+
+                                    continue;
                                 }
 
-                                ReqGetDvrPlan rgdp = new ReqGetDvrPlan();
-                                rgdp.MediaServerId = mediaServer.MediaServerId;
-                                var dvrPlanList = DvrPlanApis.GetDvrPlanList(rgdp, out ResponseStruct rs);
-                                if (dvrPlanList == null || dvrPlanList.Count == 0) continue;
-                                foreach (var dvrPlan in dvrPlanList)
+                                CameraInstance? camera = null;
+                                lock (Common.CameraInstanceList)
                                 {
-                                    if (dvrPlan == null || dvrPlan.Enable == false)
-                                    {
-                                        var ret = getDvrOnorOff(
-                                            dvrPlan); //如果录制计划为停止状态，在处理下一个计划任务前要查看该录制计划是否正在执行，正在扫行的话，要停掉它
-                                        if (ret)
-                                        {
-                                            setDvrOnorOff(dvrPlan, false);
-                                        }
-
-                                        continue;
-                                    }
-
-                                    CameraInstance camera = null;
-                                    lock (Common.CameraInstanceList)
-                                    {
-                                        camera =
-                                            Common.CameraInstanceList.FindLast(x =>
-                                                x.CameraId.Equals(dvrPlan.CameraId));
-                                    }
-
-                                    if (camera != null)
-                                    {
-                                        ExecDelete(dvrPlan);
-                                        if (camera.EnableLive &&
-                                            getCameraSessionStatus(camera.PushMediaServerId, camera.CameraId))
-                                        {
-                                            execOnOrOff(dvrPlan);
-                                        }
-                                    }
-
-                                    Thread.Sleep(2000);
+                                    camera =
+                                        Common.CameraInstanceList.FindLast(x =>
+                                            x.CameraId.Equals(dvrPlan.CameraId));
                                 }
+
+                                if (camera != null)
+                                {
+                                    ExecDelete(dvrPlan);
+                                    if (camera.EnableLive &&
+                                        getCameraSessionStatus(camera.PushMediaServerId, camera.CameraId))
+                                    {
+                                        execOnOrOff(dvrPlan);
+                                    }
+                                }
+
+                                Thread.Sleep(2000);
                             }
                         }
+                    }
 
                     Thread.Sleep(5000);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("报错了：\r\n" + ex.Message + "\r\n" + ex.StackTrace);
+                    Logger.Logger.Error("报错了->" + ex.Message + "->" + ex.StackTrace);
                     continue;
                 }
             }
         }
 
+        /// <summary>
+        /// 录制计划的自动化
+        /// </summary>
         public RecordAutoKeeper()
         {
             new Thread(new ThreadStart(delegate
@@ -577,7 +644,7 @@ namespace StreamNodeWebApi.AutoTasker
                 {
                     Run();
                 }
-                catch (Exception ex)
+                catch
                 {
                     //
                 }

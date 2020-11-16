@@ -34,6 +34,9 @@ namespace StreamMediaServerKeeper
                             taskStatus.PlayUrl = taskReturn.Uri;
                         }
 
+                        Logger.Logger.Debug("一个裁剪合并任务执行回调 -> " + taskReturn.Task.TaskId + " -> " +
+                                            taskReturn.Status.ToString() + "->" + taskReturn.TimeConsuming.ToString() +
+                                            "->" + taskReturn.Task.CallbakUrl);
                         var postDate = JsonHelper.ToJson(taskReturn);
                         var ret = NetHelper.HttpPostRequest(taskReturn.Task.CallbakUrl!, null!, postDate);
                     }
@@ -130,6 +133,7 @@ namespace StreamMediaServerKeeper
             };
             try
             {
+                Logger.Logger.Info("接受一个裁剪合并请求 ->" + task.TaskId);
                 CutMergeTaskList.Add(task);
                 CutMergeTaskStatusList.Add(task);
                 return new CutMergeTaskResponse()
@@ -142,13 +146,14 @@ namespace StreamMediaServerKeeper
                     Request = null,
                 };
             }
-            catch
+            catch (Exception ex)
             {
                 rs = new ResponseStruct()
                 {
                     Code = ErrorNumber.Other,
                     Message = ErrorMessage.ErrorDic![ErrorNumber.Other],
                 };
+                Logger.Logger.Error("接受一个裁剪合并请求出现异常 ->" + task.TaskId + " -> " + ex.Message + "->" + ex.StackTrace);
                 return null;
             }
         }
@@ -174,7 +179,7 @@ namespace StreamMediaServerKeeper
                 string videoTsFilePath = tsPath + "/" + videoTsFileName;
                 string ffmpegCmd = Common.FFmpegBinPath + " -i " + task.CutMergeFileList[i]!.FilePath! +
                                    " -vcodec copy -acodec copy -vbsf h264_mp4toannexb " + videoTsFilePath + " -y";
-                var retRun = LinuxShell.Run(ffmpegCmd, 1000 * 60 * 30, out string std, out string err);
+                var retRun = ProcessShell.Run(ffmpegCmd, 1000 * 60 * 30, out string std, out string err);
 
                 if (retRun && (!string.IsNullOrEmpty(std) || !string.IsNullOrEmpty(err)) &&
                     File.Exists(videoTsFilePath))
@@ -189,6 +194,8 @@ namespace StreamMediaServerKeeper
                 task.ProcessPercentage += ((double) 1 / (double) task.CutMergeFileList!.Count * 100f) * 0.4f;
                 Thread.Sleep(20);
             }
+
+            Logger.Logger.Debug("完成裁剪合并任务打包成TS文件 ->" + task.TaskId);
 
             return task;
         }
@@ -223,7 +230,7 @@ namespace StreamMediaServerKeeper
                                " -f concat -safe 0 -i " + mergePath +
                                "files.txt" + " -c copy  -movflags faststart " + newFilePath;
 
-            var retRun = LinuxShell.Run(ffmpegCmd, 1000 * 60 * 30, out string std, out string err);
+            var retRun = ProcessShell.Run(ffmpegCmd, 1000 * 60 * 30, out string std, out string err);
             task.ProcessPercentage += 40f;
             if (retRun && (!string.IsNullOrEmpty(std) || !string.IsNullOrEmpty(err)) &&
                 File.Exists(newFilePath))
@@ -232,11 +239,12 @@ namespace StreamMediaServerKeeper
                 FileInfo fileInfo = new FileInfo(newFilePath);
                 if (fileInfo.Length > 10)
                 {
+                    Logger.Logger.Debug("完成裁剪合并任务合并文件 ->" + task.TaskId);
                     return newFilePath;
                 }
             }
 
-            /*LogWriter.WriteLog("合并请求任务失败(mergeProcess失败)...", task.TaskId! + "\r\n" + err, ConsoleColor.Yellow);*/
+            Logger.Logger.Warn("合并请求任务失败(mergeProcess失败)... ->" + task.TaskId! + "->" + err);
             return null!;
         }
 
@@ -255,7 +263,7 @@ namespace StreamMediaServerKeeper
             string ffmpegCmd = Common.FFmpegBinPath + " -i " + cms.FilePath +
                                " -vcodec copy -acodec copy -ss " + cms.CutStartPos + " -to " + cms.CutEndPos + " " +
                                newTsName + " -y";
-            var retRun = LinuxShell.Run(ffmpegCmd, 1000 * 60 * 30, out string std, out string err);
+            var retRun = ProcessShell.Run(ffmpegCmd, 1000 * 60 * 30, out string std, out string err);
             if (retRun && (!string.IsNullOrEmpty(std) || !string.IsNullOrEmpty(err)) &&
                 File.Exists(newTsName))
             {
@@ -284,12 +292,11 @@ namespace StreamMediaServerKeeper
                 }
                 else
                 {
-                    /*
-                    LogWriter.WriteLog("合并请求任务裁剪失败(cutProcess)...", ffmpegCmd + "\r\n" + err, ConsoleColor.Yellow);
-                */
+                    Logger.Logger.Warn("合并请求任务裁剪失败(cutProcess)... ->" + ffmpegCmd + "->" + err);
                 }
             }
 
+            Logger.Logger.Debug("完成裁剪文件任务 ->" + cms.FilePath);
             return cms;
         }
 
@@ -352,6 +359,7 @@ namespace StreamMediaServerKeeper
                         {
                         }
 
+                        Logger.Logger.Debug("裁剪合并任务成功 ->" + task.TaskId);
                         return new CutMergeTaskResponse
                         {
                             FilePath = newPath,
@@ -363,6 +371,7 @@ namespace StreamMediaServerKeeper
                         };
                     }
 
+                    Logger.Logger.Warn("裁剪合并任务失败 ->" + task.TaskId);
                     return new CutMergeTaskResponse
                     {
                         FilePath = "",
@@ -375,9 +384,7 @@ namespace StreamMediaServerKeeper
                 }
                 catch (Exception ex)
                 {
-                    /*
-                    LogWriter.WriteLog("裁剪合并视频文件时出现异常...", ex.Message + "\r\n" + ex.StackTrace, ConsoleColor.Yellow);
-                    */
+                    Logger.Logger.Error("裁剪合并视频文件时出现异常... ->" + ex.Message + "->" + ex.StackTrace);
                     return null!;
                 }
                 finally

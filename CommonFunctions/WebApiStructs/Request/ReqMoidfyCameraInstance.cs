@@ -1,5 +1,8 @@
 namespace CommonFunctions.WebApiStructs.Request
 {
+    /// <summary>
+    /// 请求结构-修改摄像头实例
+    /// </summary>
     public class ReqMoidfyCameraInstance
     {
         private string _cameraId;
@@ -12,12 +15,18 @@ namespace CommonFunctions.WebApiStructs.Request
         private bool? _enablePtz;
         private bool? _enableRecord;
         private bool? _ifGB28181Tcp;
+        private string? _pushMediaServerId;
+        private bool? _mobileCamera;
 
+        /// <summary>
+        /// 摄像头实例ID（不可修改，是条件）
+        /// </summary>
         public string CameraId
         {
             get => _cameraId;
             set => _cameraId = value;
         }
+
 
         public string? CameraName
         {
@@ -72,6 +81,18 @@ namespace CommonFunctions.WebApiStructs.Request
         {
             get => _ifGB28181Tcp;
             set => _ifGB28181Tcp = value;
+        }
+
+        public string? PushMediaServerId
+        {
+            get => _pushMediaServerId;
+            set => _pushMediaServerId = value;
+        }
+
+        public bool? MobileCamera
+        {
+            get => _mobileCamera;
+            set => _mobileCamera = value;
         }
     }
 }

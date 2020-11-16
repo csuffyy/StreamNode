@@ -13,8 +13,13 @@
     </PropertyGroup>
 
 
+    <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+      <DocumentationFile>Swagger.xml</DocumentationFile>
+    </PropertyGroup>
+
+
     <ItemGroup>
-        <PackageReference Include="ini-parser" Version="2.5.2" />
+        <PackageReference Include="ini-parser-netstandard" Version="2.5.2" />
         <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
         <PackageReference Include="Swashbuckle.AspNetCore" Version="5.5.1" />
         <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="5.5.1" />
@@ -22,7 +27,7 @@
 
 
     <ItemGroup>
-      <ProjectReference Include="..\CommonFunctions\CommonFunctions.csproj" />
+      <ProjectReference Include="..\Logger\Logger.csproj" />
     </ItemGroup>
 
 

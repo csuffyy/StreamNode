@@ -14,7 +14,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Net;
 using System.Threading;
-using GB28181.Logger4Net;
 using SIPSorcery.Sys;
 
 //using SIPSorcery.SIP;
@@ -267,7 +266,7 @@ namespace GB28181.Net
             "syncsrc={0}, ts={1} ,te={2} , dur={3} ,seqs={4,-5:S} ,seqe={5,-5:S} ,pkttot={6,-3:S} ,jitmax={7,-3:S}, jitavg={8,-4:S} " +
             ",transit={9,-5:S} ,pktrate={10,-5:S} ,bytestot={11,-5:S} ,bw={12,-9:S} ,drops={13} ,jitdrops={14} ,duplicates={15} ,outoforder={16}";
 
-        private static ILog logger = LogManager.GetLogger("rtcp");
+        //  private static ILog logger = LogManager.GetLogger("rtcp");
 
         public int JitterBufferMilliseconds = 150; // The size of a the theoretical jitter buffer.
 
@@ -313,8 +312,9 @@ namespace GB28181.Net
 
             m_lastSampleTime = DateTime.Now;
 
-            logger.Debug("New RTCP report created for " + syncSource + " for stream from " +
-                         IPSocket.GetSocketString(remoteEndPoint) + ", start seq num=" + startSequenceNumber + ".");
+            Logger.Logger.Debug("New RTCP report created for " + syncSource + " for stream from " +
+                                IPSocket.GetSocketString(remoteEndPoint) + ", start seq num=" + startSequenceNumber +
+                                ".");
             //resultsLogger.Info("StartTime,StartTimestamp,EndTime,EndTimestamp,Duration(ms),StartSeqNum,EndSeqNum,TotalPackets,TotalBytes,TransmissionRate(bps),Drops,Duplicates");
 
             RTPReceiveRecord measurement =
@@ -343,7 +343,7 @@ namespace GB28181.Net
 
                 if (m_rcvdSeqNums.ContainsKey(sequenceNumber))
                 {
-                    logger.Debug("duplicate " + sequenceNumber + ".");
+                    Logger.Logger.Debug("duplicate " + sequenceNumber + ".");
                     m_rcvdSeqNums[sequenceNumber].Duplicates = m_rcvdSeqNums[sequenceNumber].Duplicates + 1;
                 }
                 //else if(sequenceNumber < m_windowStartSeqNum)
@@ -401,7 +401,7 @@ namespace GB28181.Net
                     bool jitterDiscard = false;
                     if (jitter >= JitterBufferMilliseconds)
                     {
-                        logger.Debug("jitter discard " + sequenceNumber + ".");
+                        Logger.Logger.Debug("jitter discard " + sequenceNumber + ".");
                         jitterDiscard = true;
                     }
 
@@ -418,8 +418,8 @@ namespace GB28181.Net
                     {
                         if (m_rcvdSeqNums.ContainsKey(sequenceNumber))
                         {
-                            logger.Warn("RecordRTPReceive having to remove measurement for " + sequenceNumber +
-                                        " in order to accomodate new RTP measurement.");
+                            Logger.Logger.Warn("RecordRTPReceive having to remove measurement for " + sequenceNumber +
+                                               " in order to accomodate new RTP measurement.");
                             m_rcvdSeqNums.Remove(sequenceNumber);
                         }
 
@@ -431,7 +431,7 @@ namespace GB28181.Net
             }
             catch (Exception excp)
             {
-                logger.Error("Exception RecordRTPReceive for " + sequenceNumber + ". " + excp.Message);
+                Logger.Logger.Error("Exception RecordRTPReceive for " + sequenceNumber + ". ->" + excp.Message);
             }
         }
 
@@ -524,7 +524,7 @@ namespace GB28181.Net
             }
             catch (Exception excp)
             {
-                logger.Error("Exception CheckForAvailableSample. " + excp.Message);
+                Logger.Logger.Error("Exception CheckForAvailableSample. ->" + excp.Message);
                 return null;
             }
         }
@@ -578,13 +578,13 @@ namespace GB28181.Net
 
                         if (measurement.Duplicates > 0)
                         {
-                            logger.Debug("Duplicates for " + testSeqNum + " number " + measurement.Duplicates);
+                            Logger.Logger.Debug("Duplicates for " + testSeqNum + " number " + measurement.Duplicates);
                             sample.Duplicates += (uint) measurement.Duplicates;
                         }
 
                         if (!measurement.InSequence)
                         {
-                            logger.Debug("OutOfOrder for " + testSeqNum);
+                            Logger.Logger.Debug("OutOfOrder for " + testSeqNum);
                             sample.OutOfOrder++;
                         }
                         else
@@ -605,7 +605,7 @@ namespace GB28181.Net
 
                         if (measurement.JitterBufferDiscard)
                         {
-                            logger.Debug("Jitter discard for " + testSeqNum);
+                            Logger.Logger.Debug("Jitter discard for " + testSeqNum);
                             sample.JitterDiscards++;
                         }
 
@@ -619,7 +619,7 @@ namespace GB28181.Net
                     }
                     else
                     {
-                        logger.Debug("Packet drop for " + index);
+                        Logger.Logger.Debug("Packet drop for " + index);
                         sample.PacketsLost++;
                     }
                 }
@@ -665,7 +665,7 @@ namespace GB28181.Net
                     sample.OutOfOrder.ToString()
                 });
 
-                logger.Info(rtcpReport);
+                Logger.Logger.Info(rtcpReport);
 
                 //logger.Info("start=" + sample.SampleStartTime.ToString("HH:mm:ss:fff") + ",end=" + sample.SampleEndTime.ToString("HH:mm:ss:fff") + ",dur=" + sampleDuration.TotalMilliseconds.ToString("0") + "ms" +
                 //    ",seqnnumstart=" + sample.StartSequenceNumber + ",seqnumend=" + sample.EndSequenceNumber + ",pktstotal=" + sample.TotalPackets + "p,pktrate=" + packetRate.ToString("0.##") + "pps,bytestotal=" + sample.BytesReceived + "B,bw=" + sample.TransmissionRate.ToString("0.##") + "Kbps,jitteravg=" +
@@ -675,7 +675,7 @@ namespace GB28181.Net
             }
             catch (Exception excp)
             {
-                logger.Error("Exception Sample. " + excp.Message);
+                Logger.Logger.Error("Exception Sample. ->" + excp.Message);
                 return null;
             }
             finally
@@ -711,7 +711,7 @@ namespace GB28181.Net
             }
             catch (Exception excp)
             {
-                logger.Debug("Exception CheckForSamples. " + excp.Message);
+                Logger.Logger.Debug("Exception CheckForSamples. " + excp.Message);
             }
         }
 
@@ -719,15 +719,16 @@ namespace GB28181.Net
         {
             try
             {
-                logger.Debug("Shutting down RTCPReportSampler for syncsource= " + m_syncSource + " on stream from " +
-                             m_remoteEndPoint.ToString() + ".");
+                Logger.Logger.Debug("Shutting down RTCPReportSampler for syncsource= " + m_syncSource +
+                                    " on stream from " +
+                                    m_remoteEndPoint.ToString() + ".");
 
                 m_checkForSamples = false;
                 m_checkForSampleEvent.Set();
             }
             catch (Exception excp)
             {
-                logger.Error("Exception RTCPReportSampler Shutdown. " + excp.Message);
+                Logger.Logger.Error("Exception RTCPReportSampler Shutdown. ->" + excp.Message);
             }
         }
 

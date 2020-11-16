@@ -128,7 +128,7 @@ namespace StreamNodeWebApi.Controllers
         /// </summary>
         /// <returns></returns>
         [Route("HardDeleteDvrVideoByIdList")]
-        [HttpGet]
+        [HttpPost]
         [Log]
         [AuthVerify]
         public bool HardDeleteDvrVideoByIdList(List<long> dvrVideoId)
@@ -360,14 +360,14 @@ namespace StreamNodeWebApi.Controllers
         /// <param name="cameraId"></param>
         /// <returns></returns>
         /// <exception cref="HttpResponseException"></exception>
-        [Route("GetCameraInstanceByCameraId")]
+        [Route("GetCameraSessionByCameraId")]
         [HttpGet]
         [Log]
         [AuthVerify]
-        public CameraSession GetCameraInstanceByCameraId(string mediaServerId, string cameraId)
+        public CameraSession GetCameraSessionByCameraId(string mediaServerId, string cameraId)
         {
             ResponseStruct rs;
-            var ret = MediaServerApis.GetCameraInstanceByCameraId(mediaServerId, cameraId, out rs);
+            var ret = MediaServerApis.GetCameraSessionByCameraId(mediaServerId, cameraId, out rs);
             if (rs.Code != ErrorNumber.None)
             {
                 throw new HttpResponseException(JsonHelper.ToJson(rs));
@@ -376,6 +376,31 @@ namespace StreamNodeWebApi.Controllers
             return ret;
         }
 
+        
+      
+        /// <summary>
+        /// 通过流媒体ID与摄像头实例ID获取SipDeviceId
+        /// </summary>
+        /// <param name="mediaServerId"></param>
+        /// <param name="cameraId"></param>
+        /// <returns></returns>
+        /// <exception cref="HttpResponseException"></exception>
+        [Route("GetSipDeviceIdFromCameraId")]
+        [HttpGet]
+        [Log]
+        [AuthVerify]
+        public string GetSipDeviceIdFromCameraId(string mediaServerId,string cameraId)
+        {
+            ResponseStruct rs;
+            var ret = MediaServerApis.GetSipDeviceIdFromCameraId(mediaServerId,cameraId, out rs);
+            if (rs.Code != ErrorNumber.None)
+            {
+                throw new HttpResponseException(JsonHelper.ToJson(rs));
+            }
+
+            return ret;
+        }
+        
 
         /// <summary>
         /// 获取在线摄像头列表
@@ -724,8 +749,8 @@ namespace StreamNodeWebApi.Controllers
 
             return ret;
         }
-        
-        
+
+
         /// <summary>
         /// 激活sip网关自动添加的摄像头
         /// </summary>
@@ -733,7 +758,7 @@ namespace StreamNodeWebApi.Controllers
         /// <returns></returns>
         /// <exception cref="HttpResponseException"></exception>
         [Route("ActivateSipCamera")]
-        [HttpGet]
+        [HttpPost]
         [Log]
         [AuthVerify]
         public CameraInstance ActivateSipCamera(ReqActivateSipCamera req)
@@ -747,7 +772,7 @@ namespace StreamNodeWebApi.Controllers
 
             return ret;
         }
-        
+
 
         /// <summary>
         /// 启动流媒体服务

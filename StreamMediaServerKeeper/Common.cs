@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -12,13 +14,12 @@ namespace StreamMediaServerKeeper
     public static class Common
     {
         public static string WorkPath = Environment.CurrentDirectory + "/";
-        public static string ConfigPath = WorkPath + "Config.conf";
+        public static string ConfigPath = WorkPath + "/Config/config.conf";
         public static string FFmpegBinPath = WorkPath + "ffmpeg";
         public static string StaticFilePath = WorkPath + "www/";
         public static string CutOrMergePath = StaticFilePath + "CutMergeFile/";
         public static string CutOrMergeTempPath = StaticFilePath + "CutMergeDir/";
         public static string RecordPath = StaticFilePath + "record/";
-        public static string SystemLogPath = WorkPath + "log/";
         public static int FFmpegThreadCount = 2;
         public static string MediaServerBinPath = null!;
         public static string StreamNodeServerUrl = null!;
@@ -35,7 +36,7 @@ namespace StreamMediaServerKeeper
         /// </summary>
         public static string CustomizedRecordFilePath = "";
 
-        public static LogMonitor LogMonitor = new LogMonitor();
+        //  public static LogMonitor LogMonitor = new LogMonitor();
 
 
         /// <summary>
@@ -103,13 +104,43 @@ namespace StreamMediaServerKeeper
             return random_str;
         }
 
+
+        /// <summary>
+        /// 替换#开头的所有行为;开头
+        /// </summary>
+        /// <param name="filePath"></param>
+        private static void processZLMediaKitConfigFile(string filePath)
+        {
+            if (File.Exists(filePath))
+            {
+                var list = File.ReadAllLines(filePath).ToList();
+                var tmp_list = new List<string>();
+                foreach (var str in list)
+                {
+                    if (!str.StartsWith('#'))
+                    {
+                        tmp_list.Add(str);
+                    }
+                    else
+                    {
+                        int index = str.IndexOf("#", StringComparison.Ordinal);
+                        tmp_list.Add(str.Remove(index, index).Insert(index, ";"));
+                    }
+                }
+
+                File.WriteAllLines(filePath, tmp_list);
+            }
+        }
+
         /// <summary>
         /// 读取流媒体配置文件中关键信息
         /// </summary>
         private static void getMediaServerConfig()
         {
             string iniPath = checkMediaServerConfig();
+            processZLMediaKitConfigFile(iniPath); //处理FileIniDataParser碰到#开头的行，解析错误的问题
             var parser = new FileIniDataParser();
+
             IniData data = parser.ReadFile(iniPath);
             var _tmpStr = data["general"]["mediaServerId"];
             if (!string.IsNullOrEmpty(_tmpStr))
@@ -303,7 +334,7 @@ namespace StreamMediaServerKeeper
         /// </summary>
         public static void KillSelf(string message = "")
         {
-            Console.WriteLine("异常情况，结束自己进程..." + " " + message);
+            Logger.Logger.Fatal("异常情况，结束自己进程..." + "-> " + message);
             string fileName = Path.GetFileName(Environment.GetCommandLineArgs()[0]);
             var ret = GetProcessPid(fileName);
             if (ret > 0)
@@ -315,7 +346,7 @@ namespace StreamMediaServerKeeper
         public static void KillProcess(int pid)
         {
             string cmd = "kill -9 " + pid.ToString();
-            LinuxShell.Run(cmd, 1000);
+            ProcessShell.Run(cmd, 1000);
         }
 
         /// <summary>
@@ -335,7 +366,7 @@ namespace StreamMediaServerKeeper
                 cmd = "ps -A |grep " + processName + "|grep -v grep|awk \'{print $1}\'";
             }
 
-            LinuxShell.Run(cmd, 1000, out string std, out string err);
+            ProcessShell.Run(cmd, 1000, out string std, out string err);
             if (string.IsNullOrEmpty(std) && string.IsNullOrEmpty(err))
             {
                 return -1;
@@ -433,7 +464,7 @@ namespace StreamMediaServerKeeper
                 catch (Exception ex)
                 {
                     MySystemInfo = null;
-                    Console.WriteLine("报错了：\r\n" + ex.Message + "\r\n" + ex.StackTrace);
+                    Logger.Logger.Error("报错了-> " + ex.Message + " -> " + ex.StackTrace);
                     continue;
                 }
             }

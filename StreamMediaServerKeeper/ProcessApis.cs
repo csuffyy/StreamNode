@@ -5,6 +5,9 @@ using System.Threading;
 
 namespace StreamMediaServerKeeper
 {
+    /// <summary>
+    /// 
+    /// </summary>
     public class ProcessApis
     {
         private uint _pid;
@@ -35,7 +38,10 @@ namespace StreamMediaServerKeeper
                 Code = ErrorNumber.None,
                 Message = ErrorMessage.ErrorDic![ErrorNumber.None],
             };
-            return File.Exists(filePath);
+
+            var h = File.Exists(filePath);
+            Logger.Logger.Debug("检查文件是否存在 -> " + filePath + " ->" + h.ToString());
+            return h;
         }
 
         /// <summary>
@@ -51,11 +57,13 @@ namespace StreamMediaServerKeeper
                 Code = ErrorNumber.None,
                 Message = ErrorMessage.ErrorDic![ErrorNumber.None],
             };
-            if (File.Exists(filePath))
+            var h = File.Exists(filePath);
+            if (h)
             {
                 File.Delete(filePath);
             }
 
+            Logger.Logger.Debug("删除文件 -> " + filePath + " ->" + h.ToString());
             return true;
         }
 
@@ -76,10 +84,13 @@ namespace StreamMediaServerKeeper
             {
                 foreach (var filePath in filePathList)
                 {
-                    if (File.Exists(filePath))
+                    var h = File.Exists(filePath);
+                    if (h)
                     {
                         File.Delete(filePath);
                     }
+
+                    Logger.Logger.Debug("删除文件 -> " + filePath + " ->" + h.ToString());
                 }
             }
 
@@ -106,10 +117,13 @@ namespace StreamMediaServerKeeper
                     foreach (DirectoryInfo subdir in subdirs)
                     {
                         FileSystemInfo[] subFiles = subdir.GetFileSystemInfos();
-                        if (subFiles.Length == 0)
+                        var l = subFiles.Length;
+                        if (l == 0)
                         {
                             subdir.Delete();
                         }
+
+                        Logger.Logger.Debug("清除空目录 ->" + subdir + " ->" + (l == 0 ? "true" : "false"));
                     }
                 }
 
@@ -133,6 +147,7 @@ namespace StreamMediaServerKeeper
                 Code = ErrorNumber.None,
                 Message = ErrorMessage.ErrorDic![ErrorNumber.None],
             };
+            Logger.Logger.Debug("检查流媒体服务器是否运行 ->" + _isRunning.ToString());
             return _isRunning;
         }
 
@@ -162,7 +177,7 @@ namespace StreamMediaServerKeeper
                     cmd = "kill -9 " + _pid.ToString();
                 }
 
-                LinuxShell.Run(cmd, 500);
+                ProcessShell.Run(cmd, 500);
                 Thread.Sleep(200);
                 i++;
             }
@@ -174,9 +189,11 @@ namespace StreamMediaServerKeeper
                     Code = ErrorNumber.Other,
                     Message = ErrorMessage.ErrorDic![ErrorNumber.Other],
                 };
+                Logger.Logger.Debug("关闭流媒体服务器失败...");
                 return false;
             }
 
+            Logger.Logger.Debug("关闭流媒体服务器成功...");
             return true;
         }
 
@@ -198,7 +215,9 @@ namespace StreamMediaServerKeeper
             }
 
             Thread.Sleep(2000);
-            return RunServer(out rs);
+            var t = RunServer(out rs);
+            Logger.Logger.Debug("重启流媒体服务器 ->" + t.ToString());
+            return t;
         }
 
         /// <summary>
@@ -226,10 +245,10 @@ namespace StreamMediaServerKeeper
                     string stdout = "";
                     string errout = "";
                     string cmd = "ulimit -c unlimited";
-                    LinuxShell.Run(cmd, 500); //执行取消限制
+                    ProcessShell.Run(cmd, 500); //执行取消限制
                     //  cmd = Common.MediaServerBinPath + " -d &";
                     cmd = "nohup " + Common.MediaServerBinPath + " > " + dir + "log/MServerRun.log &";
-                    LinuxShell.Run(cmd, 1000);
+                    ProcessShell.Run(cmd, 1000);
                     int i = 0;
                     while (!checkProcessExists() && i < 50)
                     {
@@ -239,6 +258,7 @@ namespace StreamMediaServerKeeper
 
                     if (checkProcessExists())
                     {
+                        Logger.Logger.Debug("启动流媒体服务器 -> pid->" + _pid.ToString() + " ->Alreday Exist");
                         return _pid;
                     }
 
@@ -248,9 +268,11 @@ namespace StreamMediaServerKeeper
                         Message = ErrorMessage.ErrorDic![ErrorNumber.ZLMediaKitRunBinExcept] + "\r\n" + stdout +
                                   "\r\n" + errout,
                     };
+                    Logger.Logger.Debug("启动流媒体服务器失败... -> pid->0 ->" + JsonHelper.ToJson(rs));
                     return 0;
                 }
 
+                Logger.Logger.Debug("启动流媒体服务器 -> pid->" + _pid.ToString());
                 return _pid; //已经启动着的，不用重复启动
             }
 
@@ -259,6 +281,7 @@ namespace StreamMediaServerKeeper
                 Code = ErrorNumber.ZLMediaKitBinNotFound,
                 Message = ErrorMessage.ErrorDic![ErrorNumber.ZLMediaKitBinNotFound],
             };
+            Logger.Logger.Debug("启动流媒体服务器失败... -> pid->0 ->" + JsonHelper.ToJson(rs));
             return 0;
         }
 
@@ -280,7 +303,7 @@ namespace StreamMediaServerKeeper
 
             string stdout = "";
             string errout = "";
-            var ret = LinuxShell.Run(cmd, 300, out stdout, out errout);
+            var ret = ProcessShell.Run(cmd, 300, out stdout, out errout);
             if (!string.IsNullOrEmpty(stdout) && ret)
             {
                 if (uint.TryParse(stdout, out _pid))

@@ -20,7 +20,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using GB28181.Logger4Net;
 using GB28181.Sys;
 
 namespace GB28181.Net
@@ -56,7 +55,7 @@ namespace GB28181.Net
 
         private static int MaxMessageSize = RTSPConstants.RTSP_MAXIMUM_LENGTH;
 
-        private static ILog logger = AppState.logger;
+        // private static ILog logger = AppState.logger;
 
         private IPEndPoint m_localIPEndPoint;
         private TcpListener m_tcpServerListener;
@@ -105,11 +104,11 @@ namespace GB28181.Net
                     PruneConnections(PRUNE_THREAD_NAME + m_localIPEndPoint.Port);
                 });
 
-                logger.Debug("RTSP server listener created " + m_localIPEndPoint + ".");
+                Logger.Logger.Debug("RTSP server listener created " + m_localIPEndPoint + ".");
             }
             catch (Exception excp)
             {
-                logger.Error("Exception RTSPServer Initialise. " + excp.Message);
+                Logger.Logger.Error("Exception RTSPServer Initialise. ->" + excp.Message);
                 throw excp;
             }
         }
@@ -120,7 +119,8 @@ namespace GB28181.Net
             {
                 Thread.CurrentThread.Name = threadName;
 
-                logger.Debug("RTSP server socket on " + m_localIPEndPoint + " accept connections thread started.");
+                Logger.Logger.Debug(
+                    "RTSP server socket on " + m_localIPEndPoint + " accept connections thread started.");
 
                 while (!Closed)
                 {
@@ -131,7 +131,7 @@ namespace GB28181.Net
                         tcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
 
                         IPEndPoint remoteEndPoint = (IPEndPoint) tcpClient.Client.RemoteEndPoint;
-                        logger.Debug("RTSP server accepted connection from " + remoteEndPoint + ".");
+                        Logger.Logger.Debug("RTSP server accepted connection from " + remoteEndPoint + ".");
 
                         RTSPConnection rtspClientConnection =
                             new RTSPConnection(this, tcpClient.GetStream(), remoteEndPoint);
@@ -150,16 +150,17 @@ namespace GB28181.Net
                     catch (Exception acceptExcp)
                     {
                         // This exception gets thrown if the remote end disconnects during the socket accept.
-                        logger.Warn("Exception RTSPServer  accepting socket (" + acceptExcp.GetType() + "). " +
-                                    acceptExcp.Message);
+                        Logger.Logger.Error("Exception RTSPServer  accepting socket (" + acceptExcp.GetType() +
+                                            "). ->" +
+                                            acceptExcp.Message);
                     }
                 }
 
-                logger.Debug("RTSP server socket on " + m_localIPEndPoint + " listening halted.");
+                Logger.Logger.Debug("RTSP server socket on " + m_localIPEndPoint + " listening halted.");
             }
             catch (Exception excp)
             {
-                logger.Error("Exception RTSPServer Listen. " + excp.Message);
+                Logger.Logger.Error("Exception RTSPServer Listen. ->" + excp.Message);
             }
         }
 
@@ -182,7 +183,7 @@ namespace GB28181.Net
             }
             catch (Exception excp)
             {
-                logger.Warn("Exception RTSPServer ReceiveCallback. " + excp.Message);
+                Logger.Logger.Error("Exception RTSPServer ReceiveCallback. ->" + excp.Message);
                 RTSPClientSocketDisconnected(rtspConnection.RemoteEndPoint);
             }
         }
@@ -199,7 +200,7 @@ namespace GB28181.Net
         {
             try
             {
-                logger.Debug("RTSP client socket from " + remoteEndPoint + " disconnected.");
+                Logger.Logger.Debug("RTSP client socket from " + remoteEndPoint + " disconnected.");
 
                 lock (m_connectedSockets)
                 {
@@ -211,7 +212,7 @@ namespace GB28181.Net
             }
             catch (Exception excp)
             {
-                logger.Error("Exception RTSPClientDisconnected. " + excp.Message);
+                Logger.Logger.Error("Exception RTSPClientDisconnected. ->" + excp.Message);
             }
         }
 
@@ -249,9 +250,9 @@ namespace GB28181.Net
                 }
                 else if (m_localIPEndPoint.ToString() == dstEndPoint.ToString())
                 {
-                    logger.Error("The RTSPServer blocked Send to " + dstEndPoint.ToString() +
-                                 " as it was identified as a locally hosted TCP socket.\r\n" +
-                                 Encoding.UTF8.GetString(buffer));
+                    Logger.Logger.Error("The RTSPServer blocked Send to " + dstEndPoint.ToString() +
+                                        " as it was identified as a locally hosted TCP socket.->" +
+                                        Encoding.UTF8.GetString(buffer));
                     throw new ApplicationException(
                         "A Send call was made in RTSPServer to send to another local TCP socket.");
                 }
@@ -270,28 +271,30 @@ namespace GB28181.Net
                         }
                         catch (SocketException)
                         {
-                            logger.Warn("RTSPServer could not send to TCP socket " + dstEndPoint +
-                                        ", closing and removing.");
+                            Logger.Logger.Error("RTSPServer could not send to TCP socket " + dstEndPoint +
+                                                ", closing and removing.");
                             rtspClientConnection.Stream.Close();
                             m_connectedSockets.Remove(dstEndPoint.ToString());
                         }
                     }
                     else
                     {
-                        logger.Warn("Could not send RTSP packet to TCP " + dstEndPoint +
-                                    " as there was no current connection to the client, dropping message.");
+                        Logger.Logger.Warn("Could not send RTSP packet to TCP " + dstEndPoint +
+                                           " as there was no current connection to the client, dropping message.");
                     }
                 }
             }
             catch (ApplicationException appExcp)
             {
-                logger.Warn("ApplicationException RTSPServer Send (sendto=>" + dstEndPoint + "). " + appExcp.Message);
+                Logger.Logger.Error("ApplicationException RTSPServer Send (sendto=>" + dstEndPoint + "). ->" +
+                                    appExcp.Message);
                 throw;
             }
             catch (Exception excp)
             {
-                logger.Error("Exception (" + excp.GetType().ToString() + ") RTSPServer Send (sendto=>" + dstEndPoint +
-                             "). " + excp.Message);
+                Logger.Logger.Error("Exception (" + excp.GetType().ToString() + ") RTSPServer Send (sendto=>" +
+                                    dstEndPoint +
+                                    "). ->" + excp.Message);
                 throw;
             }
         }
@@ -305,7 +308,7 @@ namespace GB28181.Net
             }
             catch (Exception excp)
             {
-                logger.Error("Exception RTSPServer EndSend. " + excp.Message);
+                Logger.Logger.Error("Exception RTSPServer EndSend. ->" + excp.Message);
             }
         }
 
@@ -314,7 +317,7 @@ namespace GB28181.Net
         /// </summary>
         public void Close()
         {
-            logger.Debug("Closing RTSP server socket " + m_localIPEndPoint + ".");
+            Logger.Logger.Debug("Closing RTSP server socket " + m_localIPEndPoint + ".");
 
             Closed = true;
 
@@ -324,7 +327,8 @@ namespace GB28181.Net
             }
             catch (Exception listenerCloseExcp)
             {
-                logger.Warn("Exception RTSPServer Close (shutting down listener). " + listenerCloseExcp.Message);
+                Logger.Logger.Error("Exception RTSPServer Close (shutting down listener). ->" +
+                                    listenerCloseExcp.Message);
             }
 
             foreach (RTSPConnection rtspConnection in m_connectedSockets.Values)
@@ -335,8 +339,8 @@ namespace GB28181.Net
                 }
                 catch (Exception connectionCloseExcp)
                 {
-                    logger.Warn("Exception RTSPServer Close (shutting down connection to " +
-                                rtspConnection.RemoteEndPoint + "). " + connectionCloseExcp.Message);
+                    Logger.Logger.Warn("Exception RTSPServer Close (shutting down connection to " +
+                                       rtspConnection.RemoteEndPoint + "). ->" + connectionCloseExcp.Message);
                 }
             }
         }
@@ -362,7 +366,7 @@ namespace GB28181.Net
 
         private void RTPSocketDisconnected(string sessionID)
         {
-            logger.Debug("The RTP socket for RTSP session " + sessionID + " was disconnected.");
+            Logger.Logger.Debug("The RTP socket for RTSP session " + sessionID + " was disconnected.");
 
             lock (m_rtspSessions)
             {
@@ -408,8 +412,8 @@ namespace GB28181.Net
                                     inactiveConnection = m_connectedSockets[inactiveConnectionKey];
                                     m_connectedSockets.Remove(inactiveConnectionKey);
 
-                                    logger.Debug("Pruning inactive RTSP connection on to remote end point " +
-                                                 inactiveConnection.RemoteEndPoint + ".");
+                                    Logger.Logger.Debug("Pruning inactive RTSP connection on to remote end point " +
+                                                        inactiveConnection.RemoteEndPoint + ".");
                                     inactiveConnection.Close();
                                 }
 
@@ -423,7 +427,7 @@ namespace GB28181.Net
                     }
                     catch (Exception pruneExcp)
                     {
-                        logger.Error("Exception RTSPServer PruneConnections (pruning). " + pruneExcp.Message);
+                        Logger.Logger.Error("Exception RTSPServer PruneConnections (pruning). ->" + pruneExcp.Message);
                     }
 
                     // Check the list of active RTSP sessions for any that have stopped communicating or that have closed.
@@ -455,13 +459,15 @@ namespace GB28181.Net
 
                                 if (!inactiveSession.IsClosed)
                                 {
-                                    logger.Debug("Closing inactive RTSP session for session ID " +
-                                                 inactiveSession.SessionID + " established from RTSP client on " +
-                                                 inactiveSession.RemoteEndPoint + " (started at " +
-                                                 inactiveSession.StartedAt + ", RTP last activity at " +
-                                                 inactiveSession.RTPLastActivityAt + ", control last activity at " +
-                                                 inactiveSession.ControlLastActivityAt + ", is closed " +
-                                                 inactiveSession.IsClosed + ").");
+                                    Logger.Logger.Debug("Closing inactive RTSP session for session ID " +
+                                                        inactiveSession.SessionID +
+                                                        " established from RTSP client on " +
+                                                        inactiveSession.RemoteEndPoint + " (started at " +
+                                                        inactiveSession.StartedAt + ", RTP last activity at " +
+                                                        inactiveSession.RTPLastActivityAt +
+                                                        ", control last activity at " +
+                                                        inactiveSession.ControlLastActivityAt + ", is closed " +
+                                                        inactiveSession.IsClosed + ").");
                                     inactiveSession.Close();
                                 }
 
@@ -471,17 +477,19 @@ namespace GB28181.Net
                     }
                     catch (Exception rtspSessExcp)
                     {
-                        logger.Error("Exception RTSPServer checking for inactive RTSP sessions. " + rtspSessExcp);
+                        Logger.Logger.Error("Exception RTSPServer checking for inactive RTSP sessions. ->" +
+                                            rtspSessExcp);
                     }
 
                     Thread.Sleep(PRUNE_CONNECTIONS_INTERVAL * 1000);
                 }
 
-                logger.Debug("RTSPServer socket on " + m_localIPEndPoint.ToString() + " pruning connections halted.");
+                Logger.Logger.Debug("RTSPServer socket on " + m_localIPEndPoint.ToString() +
+                                    " pruning connections halted.");
             }
             catch (Exception excp)
             {
-                logger.Error("Exception RTSPServer PruneConnections. " + excp.Message);
+                Logger.Logger.Error("Exception RTSPServer PruneConnections. ->" + excp.Message);
             }
         }
 
@@ -493,7 +501,7 @@ namespace GB28181.Net
             }
             catch (Exception excp)
             {
-                logger.Error("Exception Disposing RTSPServer. " + excp.Message);
+                Logger.Logger.Error("Exception Disposing RTSPServer. ->" + excp.Message);
             }
         }
     }

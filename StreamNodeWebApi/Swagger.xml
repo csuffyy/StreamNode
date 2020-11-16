@@ -38,14 +38,19 @@
             </summary>
             <param name="context"></param>
         </member>
-        <member name="M:StreamNodeWebApi.AutoTasker.CameraAutoKeeper.getCameraCurrentSession(CommonFunctions.DBStructs.CameraInstance)">
+        <member name="T:StreamNodeWebApi.AutoTasker.CameraAutoKeeper">
+            <summary>
+            摄像头控制
+            </summary>
+        </member>
+        <member name="M:StreamNodeWebApi.AutoTasker.CameraAutoKeeper.GetCameraCurrentSession(CommonFunctions.DBStructs.CameraInstance)">
             <summary>
             获取摄像头session
             </summary>
             <param name="cil"></param>
             <returns></returns>
         </member>
-        <member name="M:StreamNodeWebApi.AutoTasker.CameraAutoKeeper.liveGB28181(CommonFunctions.DBStructs.CameraInstance)">
+        <member name="M:StreamNodeWebApi.AutoTasker.CameraAutoKeeper.LiveGb28181(CommonFunctions.DBStructs.CameraInstance)">
             <summary>
             启动gb28181摄像头
             </summary>
@@ -57,7 +62,7 @@
             </summary>
             <param name="cil"></param>
         </member>
-        <member name="M:StreamNodeWebApi.AutoTasker.CameraAutoKeeper.stopRtsp(CommonFunction.ManageStructs.CameraSession)">
+        <member name="M:StreamNodeWebApi.AutoTasker.CameraAutoKeeper.StopRtsp(CommonFunction.ManageStructs.CameraSession)">
             <summary>
             停止rtsp摄像头
             </summary>
@@ -86,6 +91,16 @@
             监控摄像头状态，启动或停止
             </summary>
         </member>
+        <member name="M:StreamNodeWebApi.AutoTasker.CameraAutoKeeper.#ctor">
+            <summary>
+            摄像头控制
+            </summary>
+        </member>
+        <member name="T:StreamNodeWebApi.AutoTasker.RecordAutoKeeper">
+            <summary>
+            录制计划控制
+            </summary>
+        </member>
         <member name="M:StreamNodeWebApi.AutoTasker.RecordAutoKeeper.doDeleteFor24HourAgo(CommonFunctions.DBStructs.StreamDvrPlan)">
             <summary>
             清除24小时前软删除的文件
@@ -111,6 +126,7 @@
             一天一天删除文件
             </summary>
             <param name="days"></param>
+            <param name="sdp"></param>
         </member>
         <member name="M:StreamNodeWebApi.AutoTasker.RecordAutoKeeper.deleteFileOneByOne(System.Decimal,CommonFunctions.DBStructs.StreamDvrPlan)">
             <summary>
@@ -157,7 +173,12 @@
             <summary>
             执行启动和关闭指令
             </summary>
-            <param name="dvrPlan"></param>
+            <param name="sdp">参数</param>
+        </member>
+        <member name="M:StreamNodeWebApi.AutoTasker.RecordAutoKeeper.#ctor">
+            <summary>
+            录制计划的自动化
+            </summary>
         </member>
         <member name="T:StreamNodeWebApi.Controllers.DvrPlanController">
             <summary>
@@ -310,9 +331,18 @@
             <returns></returns>
             <exception cref="T:CommonFunctions.HttpResponseException"></exception>
         </member>
-        <member name="M:StreamNodeWebApi.Controllers.MediaServerController.GetCameraInstanceByCameraId(System.String,System.String)">
+        <member name="M:StreamNodeWebApi.Controllers.MediaServerController.GetCameraSessionByCameraId(System.String,System.String)">
             <summary>
             根据摄像头ID查询在线摄像头对象
+            </summary>
+            <param name="mediaServerId"></param>
+            <param name="cameraId"></param>
+            <returns></returns>
+            <exception cref="T:CommonFunctions.HttpResponseException"></exception>
+        </member>
+        <member name="M:StreamNodeWebApi.Controllers.MediaServerController.GetSipDeviceIdFromCameraId(System.String,System.String)">
+            <summary>
+            通过流媒体ID与摄像头实例ID获取SipDeviceId
             </summary>
             <param name="mediaServerId"></param>
             <param name="cameraId"></param>
@@ -438,6 +468,14 @@
             <returns></returns>
             <exception cref="T:CommonFunctions.HttpResponseException"></exception>
         </member>
+        <member name="M:StreamNodeWebApi.Controllers.MediaServerController.ActivateSipCamera(CommonFunctions.WebApiStructs.Request.ReqActivateSipCamera)">
+            <summary>
+            激活sip网关自动添加的摄像头
+            </summary>
+            <param name="req"></param>
+            <returns></returns>
+            <exception cref="T:CommonFunctions.HttpResponseException"></exception>
+        </member>
         <member name="M:StreamNodeWebApi.Controllers.MediaServerController.StartMediaServer(System.String)">
             <summary>
             启动流媒体服务
@@ -453,7 +491,7 @@
         </member>
         <member name="M:StreamNodeWebApi.Controllers.SipGateController.ActiveDeviceCatalogQuery(System.String)">
             <summary>
-            获取Sip网关自动推流状态
+            获取sip设备的设备目录列表
             </summary>
             <param name="deviceid"></param>
             <returns></returns>
@@ -578,11 +616,58 @@
             </summary>
             <param name="httpContextAccessor"></param>
         </member>
+        <member name="M:StreamNodeWebApi.Controllers.WebHookController.OnSipDeviceRegister(CommonFunctions.WebApiStructs.Request.ReqAddCameraInstance)">
+            <summary>
+            当有新设备注册时（目录查询到时），自动写入摄像头数据库
+            </summary>
+            <param name="req"></param>
+            <returns></returns>
+            <exception cref="T:CommonFunctions.HttpResponseException"></exception>
+        </member>
         <member name="M:StreamNodeWebApi.Controllers.WebHookController.OnRecordMp4Completed(CommonFunctions.WebApiStructs.Request.ReqForWebHookOnRecordMp4Completed)">
             <summary>
             录制文件完成时
             </summary>
             <returns></returns>
+        </member>
+        <member name="M:StreamNodeWebApi.Controllers.WebHookController.OnPublish(CommonFunctions.WebApiStructs.Request.ReqForWebHookOnPublish)">
+            <summary>
+            当有流被发布时
+            </summary>
+            <param name="req"></param>
+            <returns></returns>
+            <exception cref="T:CommonFunctions.HttpResponseException"></exception>
+        </member>
+        <member name="M:StreamNodeWebApi.Controllers.WebHookController.OnStreamChange(CommonFunctions.WebApiStructs.Request.ReqForWebHookOnStreamChange)">
+            <summary>
+            当流状态改变时
+            </summary>
+            <param name="req"></param>
+            <returns></returns>
+            <exception cref="T:CommonFunctions.HttpResponseException"></exception>
+        </member>
+        <member name="M:StreamNodeWebApi.Controllers.WebHookController.OnStreamNoneReader(CommonFunctions.WebApiStructs.Request.ReqForWebHookOnStreamNoneReader)">
+            <summary>
+            当有流无播放者时
+            </summary>
+            <param name="req"></param>
+            <returns></returns>
+        </member>
+        <member name="M:StreamNodeWebApi.Controllers.WebHookController.OnStop(CommonFunctions.WebApiStructs.Request.ReqForWebHookOnStop)">
+            <summary>
+            当有停止事件时
+            </summary>
+            <param name="req"></param>
+            <returns></returns>
+            <exception cref="T:CommonFunctions.HttpResponseException"></exception>
+        </member>
+        <member name="M:StreamNodeWebApi.Controllers.WebHookController.OnPlay(CommonFunctions.WebApiStructs.Request.ReqForWebHookOnPlay)">
+            <summary>
+            当有播放事件时
+            </summary>
+            <param name="req"></param>
+            <returns></returns>
+            <exception cref="T:CommonFunctions.HttpResponseException"></exception>
         </member>
         <member name="M:StreamNodeWebApi.Controllers.WebHookController.OnMediaServerStart(System.Object)">
             <summary>
@@ -621,6 +706,16 @@
             <param name="writer"></param>
             <param name="value"></param>
             <param name="options"></param>
+        </member>
+        <member name="F:StreamNodeWebApi.Program.CameraAutoKeeper">
+            <summary>
+            
+            </summary>
+        </member>
+        <member name="F:StreamNodeWebApi.Program.RecordAutoKeeper">
+            <summary>
+            
+            </summary>
         </member>
     </members>
 </doc>

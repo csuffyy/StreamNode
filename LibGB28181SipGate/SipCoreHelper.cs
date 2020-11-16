@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Security.AccessControl;
@@ -75,14 +76,20 @@ namespace LibGB28181SipGate
         {
             while (_isRunning)
             {
-                foreach (var obj in SipDeviceList)
+                for (int i = SipDeviceList.Count - 1; i >= 0; i--)
                 {
+                    var obj = _sipDeviceList[i];
                     if ((obj.SipDeviceStatus == SipDeviceStatus.Register ||
                          obj.SipDeviceStatus == SipDeviceStatus.GetDeviceList) &&
                         (obj.CameraExList == null || obj.CameraExList.Count == 0)) //自动获取设备列表
                     {
+                        Logger.Logger.Info("发现设备处于注册状态，或者通道列表为空->开始获取通道列表->" + obj.IpAddress + "->" + obj.SipPort +
+                                           "->" + obj.DeviceId);
                         if (GetDeviceList(obj.DeviceId))
                         {
+                            Logger.Logger.Debug(
+                                "获取通道列表成功了->" + obj.IpAddress + "->" + obj.SipPort + "->" + obj.DeviceId);
+
                             lock (SipDeviceLock)
                             {
                                 obj.SipDeviceStatus = SipDeviceStatus.GetDeviceList;
@@ -90,9 +97,12 @@ namespace LibGB28181SipGate
                         }
                         else
                         {
+                            Logger.Logger.Info("获取通道列表失败了，可能断线了，把它踢了，等他重新注册->" + obj.IpAddress + "->" + obj.SipPort +
+                                               "->" + obj.DeviceId);
                             lock (SipDeviceLock)
                             {
                                 obj.SipDeviceStatus = SipDeviceStatus.LooksLikeOffline;
+                                obj.LastKeepAliveTime = DateTime.Now.AddMinutes(10); //用于将sip设备踢掉，等它重新注册
                             }
                         }
 
@@ -126,8 +136,17 @@ namespace LibGB28181SipGate
                         }
                     }
 
-                    if (obj.LastKeepAliveTime.AddMinutes(2) < DateTime.Now) //2分钟以上没有心跳的，就踢掉
+
+                    var now = DateTime.Now;
+                    var time = obj.LastKeepAliveTime;
+                    var subTime = Math.Abs((now - time).TotalSeconds);
+                    if (subTime > 60) //1分钟以上没有心跳的，就踢掉
+                        // if (obj.LastKeepAliveTime.AddMinutes(2) < DateTime.Now) //2分钟以上没有心跳的，就踢掉
                     {
+                        Logger.Logger.Info("踢掉超过60秒没有心跳的设备->IP->" + obj.IpAddress + "->Port->" + obj.SipPort +
+                                           "->DevId->" + obj.DeviceId + "->" + subTime + "->" +
+                                           now.ToString("yyyy-MM-dd HH:mm:ss") + "->" +
+                                           time.ToString("yyyy-MM-dd HH:mm:ss"));
                         foreach (var camera in obj.CameraExList)
                         {
                             if (camera != null && camera.SipCameraStatus == SipCameraStatus.RealVideo)
@@ -145,13 +164,61 @@ namespace LibGB28181SipGate
 
                         lock (SipDeviceLock)
                         {
-                            _sipMessageCore.RemoteTransEPs.Remove(obj.IpAddress);
-                            SipDeviceList.Remove(obj);
+                            _sipMessageCore._registrarCore.RemoveDeviceItem(obj.IpAddress + ":" + obj.SipPort);
+                            _sipMessageCore.RemoteTransEPs.Remove(obj.IpAddress + ":" + obj.SipPort);
+                            _sipDeviceList[i] = null;
                         }
                     }
                 }
 
+                lock (SipDeviceLock)
+                {
+                    RemoveNull(SipDeviceList);
+                }
+
                 Thread.Sleep(5000); //5秒一次
+            }
+        }
+
+        /// <summary>
+        /// 删除List<T>中null的记录
+        /// </summary>
+        /// <param name="list"></param>
+        /// <typeparam name="T"></typeparam>
+        private static void RemoveNull<T>(List<T> list)
+        {
+            // 找出第一个空元素 O(n)
+            int count = list.Count;
+            for (int i = 0; i < count; i++)
+                if (list[i] == null)
+                {
+                    // 记录当前位置
+                    int newCount = i++;
+
+                    // 对每个非空元素，复制至当前位置 O(n)
+                    for (; i < count; i++)
+                        if (list[i] != null)
+                            list[newCount++] = list[i];
+
+                    // 移除多余的元素 O(n)
+                    list.RemoveRange(newCount, count - newCount);
+                    break;
+                }
+        }
+
+        public void TickOutDevice(string devId)
+        {
+            lock (SipDeviceLock)
+            {
+                var dev = SipDeviceList.FindLast(x => x.DeviceId.Equals(devId));
+                if (dev != null)
+                {
+                    lock (SipDeviceLock)
+                    {
+                        dev.SipDeviceStatus = SipDeviceStatus.LooksLikeOffline;
+                        dev.LastKeepAliveTime = DateTime.Now.AddMinutes(10); //用于将sip设备踢掉，等它重新注册
+                    }
+                }
             }
         }
 
@@ -191,6 +258,7 @@ namespace LibGB28181SipGate
                 var dev = SipDeviceList.FindLast(x => x.DeviceId.Equals(devid));
                 if (dev == null)
                 {
+                    Logger.Logger.Debug("设备注册消息->SipDevList中没有找到->进行正常注册->" + ip + "->" + port + "->" + devid);
                     var newSip = new SipDevice();
                     newSip.CRC32 = CRC32Cls.GetCRC32(ip + port + devid).ToString();
                     newSip.DeviceId = devid;
@@ -203,10 +271,11 @@ namespace LibGB28181SipGate
                     newSip.LastKeepAliveTime = DateTime.Now;
                     newSip.LastUpdateTime = DateTime.Now;
                     SipDeviceList.Add(newSip);
-                    Console.WriteLine("设备注册->" + ip + "->\r\n" + newSip.DeviceId);
+                    Logger.Logger.Info("设备注册->" + ip + "->" + newSip.DeviceId);
                 }
                 else if (dev != null && dev.SipDeviceStatus == SipDeviceStatus.UnRegister)
                 {
+                    Logger.Logger.Info("设备注册消息->SipDevList找到->属于未注册状态->进行状态转换->" + ip + "->" + port + "->" + devid);
                     dev.CameraExList.Clear();
                     dev.AlarmList.Clear();
                     dev.LastSipRequest = sipRequest;
@@ -215,17 +284,16 @@ namespace LibGB28181SipGate
                 }
                 else //发现公网不固定ip设备，可能因网络波动导致n次注册，而ip地址又不一致，造成straemnode后续处理问题，这边做一次信息修改来解决问题
                 {
-                    //sip网关全局只允许唯一deviceid,如果发现多个deviceid时，除非此设备为注销状态，将重新激活为注册状态，除此之外一律重置相关参数信息
-                    dev.CRC32 = CRC32Cls.GetCRC32(ip + port + devid).ToString();
-                    dev.DeviceId = devid;
-                    dev.SipPort = port;
-                    dev.IpAddress = ip;
-                    dev.CameraExList.Clear();
-                    dev.AlarmList.Clear();
-                    dev.LastSipRequest = sipRequest;
-                    dev.SipDeviceStatus = SipDeviceStatus.Register;
-                    dev.LastKeepAliveTime = DateTime.Now;
-                    dev.LastUpdateTime = DateTime.Now;
+                    lock (SipDeviceLock)
+                    {
+                        if (!ip.Equals(dev.IpAddress) || !port.Equals(dev.SipPort))
+                        {
+                            Logger.Logger.Info("收到一个错误的注册设备,要准备踢掉了->" + dev.DeviceId + "->" + dev.IpAddress + "->" +
+                                               dev.SipPort);
+                            dev.SipDeviceStatus = SipDeviceStatus.LooksLikeOffline;
+                            dev.LastKeepAliveTime = DateTime.Now.AddMinutes(10); //用于将sip设备踢掉，等它重新注册
+                        }
+                    }
                 }
             }
         }
@@ -238,6 +306,12 @@ namespace LibGB28181SipGate
         /// <param name="sIPAccount"></param>
         private void OnSipUnRegisterReceived(SIPRequest sipRequest, SIPAccount sIPAccount)
         {
+            Logger.Logger.Debug("设备注销消息->IP->" + sipRequest.Header.Vias.TopViaHeader.Host + "->Port->" +
+                                sipRequest.Header.Vias.TopViaHeader.Port + "->DevID->" +
+                                sipRequest.Header.From.FromURI.User);
+            _sipMessageCore._registrarCore.RemoveDeviceItem(sipRequest); //清理掉sip网关中的残留设备信息
+            _sipMessageCore.RemoteTransEPs.Remove(sipRequest.Header.Vias.TopViaHeader.Host + ":" +
+                                                  sipRequest.Header.Vias.TopViaHeader.Port);
             lock (SipDeviceLock)
             {
                 var dev = SipDeviceList.FindLast(x =>
@@ -246,7 +320,7 @@ namespace LibGB28181SipGate
                     && x.DeviceId.Equals(sipRequest.Header.From.FromURI.User));
                 if (dev != null)
                 {
-                    Console.WriteLine("设备注销->" + dev.IpAddress + "->" + dev.DeviceId);
+                    Logger.Logger.Info("设备注销->" + dev.IpAddress + "->" + dev.DeviceId);
                     dev.SipDeviceStatus = SipDeviceStatus.UnRegister;
                     dev.LastSipRequest = sipRequest;
                     dev.LastUpdateTime = DateTime.Now;
@@ -255,6 +329,43 @@ namespace LibGB28181SipGate
             }
         }
 
+
+        /// <summary>
+        /// 获取配置文件中的http端口号
+        /// </summary>
+        /// <param name="httpPort"></param>
+        /// <returns></returns>
+        private bool getHttpPortFromSystemConfig(out string httpPort)
+        {
+            var dir = Environment.CurrentDirectory;
+            if (File.Exists(dir + "/" + "system.conf"))
+            {
+                List<string> tmp_sl = File.ReadAllLines(dir + "/" + "system.conf").ToList();
+                foreach (var str in tmp_sl)
+                {
+                    string tmps = str.Trim().ToLower();
+                    if (!tmps.EndsWith(";") || tmps.StartsWith("#")) continue;
+                    tmps = tmps.TrimEnd(';');
+                    if (tmps.Contains("httpport"))
+                    {
+                        var arr_s = tmps.Split("::", StringSplitOptions.RemoveEmptyEntries);
+                        if (arr_s.Length == 2)
+                        {
+                            ushort pp = 0;
+                            var r = ushort.TryParse(arr_s[1], out pp);
+                            if (r == true && pp >= ushort.MinValue && pp <= ushort.MaxValue)
+                            {
+                                httpPort = pp.ToString();
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            httpPort = "";
+            return false;
+        }
 
         private void OnSipServiceChange(string msg, ServiceStatus state)
         {
@@ -287,44 +398,43 @@ namespace LibGB28181SipGate
                     foreach (var sub in catalog.DeviceList.Items)
                     {
                         if (sub.Status != DevStatus.ON) continue;
-
-                        var obj = dev.CameraExList.FindLast(x => x.Camera.DeviceID.Equals(sub.DeviceID));
-                        if (obj == null)
+                        int extId = int.Parse(sub.DeviceID.Substring(10, 3));
+                        if (extId == 131 || extId == 132 || extId == 134 || extId == 137)
                         {
-                            var camera = new CameraEx();
-                            camera.Ctype = CameraType.GB28181;
-                            camera.MediaServerId = "";
-                            camera.App = "";
-                            camera.Vhost = "";
-                            camera.StreamId = 0;
-                            camera.SipCameraStatus = SipCameraStatus.Idle;
-                            camera.StreamServerIp = "";
-                            camera.StreamServerPort = 0;
-                            camera.Camera = new Camera();
-                            camera.Camera.IPAddress = ip;
-                            camera.Camera.Port = port;
-                            camera.Camera.DeviceID = sub.DeviceID;
-                            camera.Camera.Name = sub.Name;
-                            camera.Camera.Manufacturer = sub.Manufacturer;
-                            camera.Camera.Model = sub.Model;
-                            camera.Camera.Owner = sub.Owner;
-                            camera.Camera.CivilCode = sub.CivilCode;
-                            camera.Camera.Adddress = sub.Address;
-                            if (sub.Parental != null) camera.Camera.Parental = (long) sub.Parental;
-                            camera.Camera.ParentID = dev.DeviceId;
-                            camera.Camera.SafetyWay = sub.SafetyWay;
-                            if (sub.RegisterWay != null) camera.Camera.RegisterWay = (long) sub.RegisterWay;
-                            if (sub.Secrecy != null) camera.Camera.Secrecy = (long) sub.Secrecy;
-                            camera.Camera.Status = sub.Status.ToString();
-                            camera.Camera.Longitude = sub.LongitudeValue;
-                            camera.Camera.Latitude = sub.LatitudeValue;
-                            dev.CameraExList.Add(camera);
-                            dev.LastUpdateTime = DateTime.Now;
-
-                            /*实验性自动添加摄像头到数据库*/
-                            int extId = int.Parse(camera.Camera.DeviceID.Substring(10, 3));
-                            if (extId == 131 || extId == 132 || extId == 134 || extId == 137)//只有131,132,134,137的是摄像头，添加进来，其他不要
+                            var obj = dev.CameraExList.FindLast(x => x.Camera.DeviceID.Equals(sub.DeviceID));
+                            if (obj == null)
                             {
+                                var camera = new CameraEx();
+                                camera.Ctype = CameraType.GB28181;
+                                camera.MediaServerId = "";
+                                camera.App = "";
+                                camera.Vhost = "";
+                                camera.StreamId = 0;
+                                camera.SipCameraStatus = SipCameraStatus.Idle;
+                                camera.StreamServerIp = "";
+                                camera.StreamServerPort = 0;
+                                camera.Camera = new Camera();
+                                camera.Camera.IPAddress = ip;
+                                camera.Camera.Port = port;
+                                camera.Camera.DeviceID = sub.DeviceID;
+                                camera.Camera.Name = sub.Name;
+                                camera.Camera.Manufacturer = sub.Manufacturer;
+                                camera.Camera.Model = sub.Model;
+                                camera.Camera.Owner = sub.Owner;
+                                camera.Camera.CivilCode = sub.CivilCode;
+                                camera.Camera.Adddress = sub.Address;
+                                if (sub.Parental != null) camera.Camera.Parental = (long) sub.Parental;
+                                camera.Camera.ParentID = dev.DeviceId;
+                                camera.Camera.SafetyWay = sub.SafetyWay;
+                                if (sub.RegisterWay != null) camera.Camera.RegisterWay = (long) sub.RegisterWay;
+                                if (sub.Secrecy != null) camera.Camera.Secrecy = (long) sub.Secrecy;
+                                camera.Camera.Status = sub.Status.ToString();
+                                camera.Camera.Longitude = sub.LongitudeValue;
+                                camera.Camera.Latitude = sub.LatitudeValue;
+                                dev.CameraExList.Add(camera);
+                                dev.LastUpdateTime = DateTime.Now;
+
+
                                 CameraInstanceForSip c = new CameraInstanceForSip();
                                 c.Activated = false;
                                 c.EnableLive = false;
@@ -347,14 +457,25 @@ namespace LibGB28181SipGate
                                 string reqData = JsonHelper.ToJson(c);
                                 try
                                 {
-                                    string url = "http://127.0.0.1:5800/WebHook/OnSipDeviceRegister";
+                                    string httpport = "";
+                                    string url = "";
+
+                                    if (getHttpPortFromSystemConfig(out httpport))
+                                    {
+                                        url = "http://127.0.0.1:" + httpport + "/WebHook/OnSipDeviceRegister";
+                                    }
+                                    else
+                                    {
+                                        url = "http://127.0.0.1:5800/WebHook/OnSipDeviceRegister";
+                                    }
+
                                     var httpRet = NetHelper.HttpPostRequest(url, null!, reqData, "utf-8", 3000);
                                 }
                                 catch
                                 {
+                                    // ignored
                                 }
                             }
-                            /*实验性自动添加摄像头到数据库*/
                         }
                     }
                 }
@@ -378,23 +499,79 @@ namespace LibGB28181SipGate
             //待实现
         }
 
+        /// <summary>
+        /// 当有录像文件查询回调时触发
+        /// </summary>
+        /// <param name="recordInfo"></param>
         private void OnRecordInfoReceived(RecordInfo recordInfo)
         {
             //待实现
+            var str = "收到GB28181的录像文件目录->\r\n"+JsonHelper.ToJson(recordInfo);
+            Logger.Logger.Debug(str);
+            
+
         }
 
         private void OnKeepAliveReceived(SIPEndPoint remoteEp, KeepAlive keepAlive, string devId)
         {
             lock (SipDeviceLock)
             {
+                var camearDev = _sipDeviceList.FindLast(x => x.DeviceId.Equals(devId));
+                if (camearDev != null && camearDev.SipDeviceStatus == SipDeviceStatus.LooksLikeOffline)
+                {
+                    Logger.Logger.Debug("收到判断为断线Sip设备的心跳数据，不做处理->" + remoteEp.Address + "->" + remoteEp.Port + "->" +
+                                        devId);
+                    return; //如果是断线状态，就不处理
+                }
+
+
+                var deviceObj = SipMessageCore.NodeMonitorService.FirstOrDefault(x => x.Key.Equals(devId));
+                if (!remoteEp.Address.ToString().Equals(deviceObj.Value.RemoteEndPoint.Address.ToString())
+                    || !remoteEp.Port.ToString().Equals(deviceObj.Value.RemoteEndPoint.Port.ToString()))
+                {
+                    deviceObj.Value.RemoteEndPoint = remoteEp;
+                }
+
+
+                if (camearDev != null && camearDev.CameraExList != null)
+                {
+                    foreach (var cex in camearDev.CameraExList)
+                    {
+                        if (cex != null && cex.Camera != null && !string.IsNullOrEmpty(cex.Camera.DeviceID))
+                        {
+                            var obj = SipMessageCore.NodeMonitorService.FirstOrDefault(x =>
+                                x.Key.Equals(cex.Camera.DeviceID));
+
+                            if (obj.Value != null)
+                            {
+                                if (!remoteEp.Address.ToString()
+                                        .Equals(obj.Value.RemoteEndPoint.Address.ToString())
+                                    || !remoteEp.Port.ToString()
+                                        .Equals(obj.Value.RemoteEndPoint.Port.ToString()))
+                                {
+                                    obj.Value.RemoteEndPoint = remoteEp;
+                                }
+                            }
+                        }
+                    }
+                }
+
+
                 var dev = SipDeviceList.FindLast(x =>
                     x.IpAddress.Equals(remoteEp.Address.ToString())
                     && x.SipPort.Equals(remoteEp.Port)
                     && x.DeviceId.Equals(devId));
                 if (dev != null)
                 {
+                    Logger.Logger.Debug("收到Sip设备的心跳数据并更新设备心跳时间->" + remoteEp.Address + "->" + remoteEp.Port + "->" +
+                                        devId);
                     dev.LastUpdateTime = DateTime.Now;
                     dev.LastKeepAliveTime = DateTime.Now;
+                }
+                else
+                {
+                    Logger.Logger.Debug("收到Sip设备的心跳数据但没有找到相关设备，不做设备心跳时间更新->" + remoteEp.Address + "->" + remoteEp.Port +
+                                        "->" + devId);
                 }
             }
         }
@@ -433,6 +610,7 @@ namespace LibGB28181SipGate
         {
             string pid = "";
             string pip = "";
+            bool found = false;
             foreach (var device in _sipDeviceList)
             {
                 foreach (var ca in device.CameraExList)
@@ -441,7 +619,14 @@ namespace LibGB28181SipGate
                     {
                         pid = device.DeviceId;
                         pip = device.IpAddress;
+                        found = true;
+                        break;
                     }
+                }
+
+                if (found)
+                {
+                    break;
                 }
             }
 
@@ -449,9 +634,10 @@ namespace LibGB28181SipGate
             {
                 SipCoreTask gdlt = new SipCoreTask(pid, devId, this);
                 TaskList.Add(gdlt);
+                
                 string streamid = pip + pid + devId;
                 uint stid = CRC32Cls.GetCRC32(streamid);
-                Console.WriteLine("资料->" + streamid + " 10进制->" + stid + " 16进制->" + string.Format("{0:X8}", stid));
+                Logger.Logger.Info("资料->" + streamid + " 10进制->" + stid + " 16进制->" + string.Format("{0:X8}", stid));
                 var ret = gdlt.Invite(stid, rptServerIp, rptPort, tcp);
                 if (ret)
                 {
@@ -472,7 +658,7 @@ namespace LibGB28181SipGate
                         }
                     }
 
-                    Console.WriteLine("请求实时视频成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                    Logger.Logger.Info("请求实时视频成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
                 }
                 else
                 {
@@ -492,7 +678,7 @@ namespace LibGB28181SipGate
                         }
                     }
 
-                    Console.WriteLine("请求实时视频失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                    Logger.Logger.Warn("请求实时视频失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
                 }
 
                 TaskList.Remove(gdlt);
@@ -526,7 +712,7 @@ namespace LibGB28181SipGate
                 int port = 0;
                 string streamid = pip + pid + devId;
                 uint stid = CRC32Cls.GetCRC32(streamid);
-                Console.WriteLine("资料->" + streamid + " 10进制->" + stid + " 16进制->" + string.Format("{0:X8}", stid));
+                Logger.Logger.Info("资料->" + streamid + " 10进制->" + stid + " 16进制->" + string.Format("{0:X8}", stid));
                 var ret = gdlt.Invite(stid, out ip, out port);
 
                 if (ret)
@@ -551,7 +737,7 @@ namespace LibGB28181SipGate
                     }
 
 
-                    Console.WriteLine("请求实时视频成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                    Logger.Logger.Info("请求实时视频成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
                 }
                 else
                 {
@@ -571,7 +757,7 @@ namespace LibGB28181SipGate
                         }
                     }
 
-                    Console.WriteLine("请求实时视频失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                    Logger.Logger.Warn("请求实时视频失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
                 }
 
                 TaskList.Remove(gdlt);
@@ -615,11 +801,11 @@ namespace LibGB28181SipGate
                         }
                     }
 
-                    Console.WriteLine("请求实时视频成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                    Logger.Logger.Info("请求实时视频成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
                 }
                 else
                 {
-                    Console.WriteLine("请求终止实时视频失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                    Logger.Logger.Warn("请求终止实时视频失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
                 }
 
                 TaskList.Remove(gdlt);
@@ -639,11 +825,11 @@ namespace LibGB28181SipGate
                 var ret = gdlt.PtzContorl(dir, speed);
                 if (ret)
                 {
-                    Console.WriteLine("请求PTZ控制成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                    Logger.Logger.Info("请求PTZ控制成功->" + gdlt.DeviceId + "->" + gdlt.CallId + "->" + dir + "->" + speed);
                 }
                 else
                 {
-                    Console.WriteLine("请求PTZ控制失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                    Logger.Logger.Warn("请求PTZ控制失败->" + gdlt.DeviceId + "->" + gdlt.CallId + "->" + dir + "->" + speed);
                 }
 
                 TaskList.Remove(gdlt);
@@ -660,11 +846,37 @@ namespace LibGB28181SipGate
             var ret = gdlt.GetDeviceList();
             if (ret)
             {
-                Console.WriteLine("获取设备目录成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                Logger.Logger.Info("获取设备目录成功->" + gdlt.DeviceId + "->" + gdlt.CallId);
             }
             else
             {
-                Console.WriteLine("获取设备目录失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
+                Logger.Logger.Warn("获取设备目录失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
+            }
+
+            TaskList.Remove(gdlt);
+            return ret;
+        }
+        
+        /// <summary>
+        /// 获取gb28181的录像文件
+        /// </summary>
+        /// <param name="deviceId"></param>
+        /// <param name="startTime"></param>
+        /// <param name="endTime"></param>
+        /// <param name="type">录像产生类型 time alarm manual all</param>
+        /// <returns></returns>
+        public int GetRecordFile(string deviceId,DateTime startTime, DateTime endTime, string type)
+        {
+            SipCoreTask gdlt = new SipCoreTask("", deviceId, this);
+            TaskList.Add(gdlt);
+            var ret = gdlt.RecordFileQuery(startTime,endTime,type);
+            if (ret>-1)
+            {
+                Logger.Logger.Info("获取录像目录成功->录像数量->("+ret+")个->" + gdlt.DeviceId + "->" + gdlt.CallId);
+            }
+            else
+            {
+                Logger.Logger.Warn("获取录像目录失败->" + gdlt.DeviceId + "->" + gdlt.CallId);
             }
 
             TaskList.Remove(gdlt);
